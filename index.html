@@ -17,8 +17,9 @@
     Raumkarten:    CMD:RAUM:<Raum>, z. B. CMD:RAUM:EG links  (gilt als Innen, Unterordner + Bildunterschrift)
     Kein Zutritt:  CMD:KEINZUTRITT oder CMD:KEINZUTRITT:<Wohnung>
 
-  Daten im Browser (localStorage, Schlüssel "svqr_daten"): alle Projekte mit Tabelle und Status
-  der Gebäude. Offline-Betrieb über den Service Worker sw.js (nur bei Aufruf über https).
+  Daten im Browser (localStorage, Schlüssel "svqr_daten"): alle Projekte mit Tabelle, Status
+  der Gebäude und Zeitpunkt jeder Statusänderung. "Status teilen" verschickt das als JSON-Datei,
+  "Status übernehmen" führt sie zusammen (je Gebäude gewinnt die jüngere Änderung). Offline-Betrieb über den Service Worker sw.js (nur bei Aufruf über https).
 -->
 <html lang="de">
 <head>
@@ -171,6 +172,11 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
       <button class="btn alt" id="done" hidden>Abschließen</button>
     </div>
     <div class="bar">
+      <button class="btn alt" id="share" hidden>Status teilen</button>
+      <button class="btn alt" id="import">Status übernehmen</button>
+      <input type="file" id="importfile" accept=".json,application/json" hidden>
+    </div>
+    <div class="bar">
       <button class="btn" id="load">Excel-Tabelle laden</button>
       <input type="search" id="q" placeholder="Suchen, z. B. 340a">
       <select id="filter" aria-label="Filter" hidden>
@@ -250,7 +256,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
 const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
@@ -340,6 +346,8 @@ function setzeStatus(name, st){
   const p = projekt();
   if (!p) return;
   if (st) p.status[name] = st; else delete p.status[name];
+  p.zeit = p.zeit || {};
+  p.zeit[name] = Date.now();               // Zeitpunkt der Änderung (für "Status teilen")
   speichern();
 }
 
@@ -438,7 +446,8 @@ async function importFile(file){
   daten.projekte[file.name] = {
     datei: file.name,
     rows: keep.map(x => ({pos: x.pos, name: x.name, street: x.street, nr: x.nr})),
-    status: vorhanden ? vorhanden.status : {}
+    status: vorhanden ? vorhanden.status : {},
+    zeit: vorhanden ? (vorhanden.zeit || {}) : {}
   };
   aktiviere(file.name);
   // Protokoll einklappbar, damit man nicht weit scrollen muss
@@ -453,7 +462,7 @@ function render(){
   $("proj").hidden = !ids.length;
   $("proj").innerHTML = ids.map(id => '<option value="' + esc(id) + '"' + (id === daten.aktiv ? " selected" : "") + ">" +
     esc(id) + "</option>").join("") + (p ? "" : '<option value="" selected>Projekt wählen …</option>');
-  $("done").hidden = $("filter").hidden = $("legend").hidden = !rows.length;
+  $("share").hidden = $("done").hidden = $("filter").hidden = $("legend").hidden = !rows.length;
 
   if (!rows.length){
     $("status").textContent = ids.length ? "Kein Projekt gewählt." : "Noch kein Projekt geladen.";
@@ -557,6 +566,10 @@ $("filter").onchange = render;
 $("proj").onchange = e => aktiviere(e.target.value);
 
 // Projekt abschließen: gibt den Speicher frei, andere Projekte bleiben erhalten
+$("share").onclick = statusTeilen;
+$("import").onclick = () => $("importfile").click();
+$("importfile").onchange = e => { if (e.target.files[0]) statusUebernehmen(e.target.files[0]); e.target.value = ""; };
+
 $("done").onclick = async () => {
   const p = projekt();
   if (!p) return;
@@ -661,6 +674,85 @@ $("print").onclick = () => {
 $("ver").textContent = VERSION;
 $("about").onclick = () => $("aboutdlg").showModal();
 $("aboutclose").onclick = () => $("aboutdlg").close();
+
+// ---------- Status teilen (ohne Server) ----------
+// Ein Paket enthält Tabelle und Status des aktiven Projekts mit Zeitstempel je Gebäude.
+// Beim Übernehmen gewinnt je Gebäude die jüngere Änderung (auch "wieder offen").
+const PAKET_TYP = "SV-ReportQR-Status";
+
+function paketErstellen(){
+  const p = projekt();
+  return {typ: PAKET_TYP, version: 1, app: VERSION, erstellt: new Date().toISOString(),
+    projekt: p.datei, rows: p.rows, status: p.status, zeit: p.zeit || {}};
+}
+
+async function statusTeilen(){
+  const p = projekt();
+  if (!p) return;
+  const tag = new Date().toISOString().slice(0, 10);
+  const name = "Status " + p.datei.replace(/\.[^.]+$/, "") + " " + tag + ".json";
+  const datei = new File([JSON.stringify(paketErstellen())], name, {type: "application/json"});
+  try {
+    if (navigator.canShare && navigator.canShare({files: [datei]})){
+      await navigator.share({files: [datei], title: "SV-ReportQR Status", text: "Status für " + p.datei});
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return;        // Teilen abgebrochen
+  }
+  // Ersatz (z. B. am PC): Datei herunterladen
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(datei);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** Führt ein Status-Paket in ein Projekt ein. Rückgabe: Anzahl übernommener Änderungen. */
+function zusammenfuehren(ziel, paket){
+  ziel.zeit = ziel.zeit || {};
+  let neu = 0;
+  const namen = new Set(Object.keys(paket.status || {}).concat(Object.keys(paket.zeit || {})));
+  for (const name of namen){
+    const tIn = (paket.zeit || {})[name] || 0, tHier = ziel.zeit[name] || 0;
+    const sIn = (paket.status || {})[name] || "", sHier = ziel.status[name] || "";
+    if (tIn > tHier || (!tHier && !sHier && sIn)){
+      if (sIn !== sHier) neu++;
+      if (sIn) ziel.status[name] = sIn; else delete ziel.status[name];
+      ziel.zeit[name] = Math.max(tIn, tHier);
+    }
+  }
+  return neu;
+}
+
+async function statusUebernehmen(file){
+  let paket;
+  try { paket = JSON.parse(await file.text()); } catch (e) { paket = null; }
+  if (!paket || paket.typ !== PAKET_TYP || !Array.isArray(paket.rows)){
+    $("msg").innerHTML = '<p class="note err">Die Datei ist kein Status von SV-ReportQR.</p>';
+    return;
+  }
+  let id = daten.projekte[paket.projekt] ? paket.projekt : null;
+  if (!id){
+    // gleiches Projekt unter anderem Dateinamen? Über gemeinsame Gebäude erkennen
+    const akt = projekt();
+    const gemeinsam = akt ? paket.rows.filter(r => akt.rows.some(x => x.name === r.name)).length : 0;
+    if (akt && gemeinsam >= paket.rows.length / 2 &&
+        await ask("Der Status gehört zu „" + paket.projekt + "“. Soll er in dein aktuelles Projekt „" + akt.datei +
+          "“ übernommen werden (" + gemeinsam + " gleiche Gebäude)?", "In aktuelles Projekt", "Als neues Projekt")){
+      id = akt.datei;
+    } else {
+      daten.projekte[paket.projekt] = {datei: paket.projekt, rows: paket.rows, status: {}, zeit: {}};
+      id = paket.projekt;
+    }
+  }
+  const n = zusammenfuehren(daten.projekte[id], paket);
+  speichern();
+  aktiviere(id);
+  const von = paket.erstellt ? new Date(paket.erstellt).toLocaleString("de-DE", {dateStyle: "short", timeStyle: "short"}) : "";
+  $("msg").innerHTML = '<p class="note">Status übernommen (Stand ' + esc(von) + "): " + n +
+    " Gebäude geändert. Wo du selbst später etwas geändert hast, bleibt dein Stand.</p>";
+}
 
 // ---------- Start ----------
 laden();
