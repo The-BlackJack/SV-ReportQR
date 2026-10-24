@@ -14,6 +14,11 @@
   Inhalt der QR-Codes (muss zu SV-ReportAssist passen):
     Gebäude:       ORDNER:<Nr>_<Straße>_<Hausnummer>, z. B. ORDNER:01_Neusser Landstraße_301
     Steuerkarten:  CMD:AUSSEN, CMD:INNEN, CMD:START, CMD:STOP
+    Raumkarten:    CMD:RAUM:<Raum>, z. B. CMD:RAUM:EG links  (gilt als Innen, Unterordner + Bildunterschrift)
+    Kein Zutritt:  CMD:KEINZUTRITT oder CMD:KEINZUTRITT:<Wohnung>
+
+  Daten im Browser (localStorage, Schlüssel "svqr_daten"): alle Projekte mit Tabelle und Status
+  der Gebäude. Offline-Betrieb über den Service Worker sw.js (nur bei Aufruf über https).
 -->
 <html lang="de">
 <head>
@@ -109,6 +114,41 @@ dialog p{margin:0 0 14px}
 #aboutdlg .tagline{margin-bottom:12px}
 #aboutdlg p{font-size:.92rem}
 #aboutdlg ul{margin:0 0 14px;padding-left:20px;font-size:.88rem}
+
+/* ---------- Projekte, Filter, Status ---------- */
+select{min-height:48px;border:1px solid var(--line);border-radius:6px;background:var(--surf);color:var(--ink);padding:0 10px;font:inherit}
+#proj{flex:1;min-width:0}
+#filter{flex:0 0 auto}
+.house.ok{background:color-mix(in srgb,#2e9d4f 26%,var(--surf));border-left-color:#2e9d4f}
+.house.teil{background:color-mix(in srgb,#f08a00 28%,var(--surf));border-left-color:#f08a00}
+#qstat{text-align:center;font-size:.92rem;color:var(--mute);margin:0 8px 6px}
+#qstat b.ok{color:#2e9d4f}#qstat b.teil{color:#f08a00}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.85rem;color:var(--mute);margin:0 0 10px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid var(--line)}
+
+/* ---------- Erweitert: Räume und Kein Zutritt ---------- */
+#mehr{width:min(520px,94vw)}
+#mehr h3{margin:14px 0 6px;font-size:1rem}
+#mehr h3:first-child{margin-top:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips .btn{min-height:44px;padding:8px 12px;font-weight:600}
+.feld{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.feld input,.feld select{flex:1;min-width:110px;min-height:44px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);padding:0 10px;font:inherit}
+.btn.warn{background:#b3261e;color:#fff}
+
+/* ---------- Drucken: vier Karten A6 auf A4 ---------- */
+#druck{display:none}
+@media print{
+  @page{size:A4 portrait;margin:0}
+  body>*:not(#druck){display:none!important}
+  body{background:#fff}
+  #druck{display:grid;grid-template-columns:105mm 105mm;grid-auto-rows:148.5mm;width:210mm}
+  #druck .pk{box-sizing:border-box;border:.2mm dashed #999;padding:12mm 10mm 8mm;text-align:center;color:#000;font-family:Arial,sans-serif;break-inside:avoid}
+  #druck .pk svg{width:78mm;height:78mm;display:block;margin:0 auto}
+  #druck .pk h2{font-size:20pt;margin:6mm 0 2mm}
+  #druck .pk small{font-size:9pt;color:#444}
+  #druck .seite{break-after:page;display:contents}
+}
 </style>
 </head>
 <body>
@@ -116,7 +156,7 @@ dialog p{margin:0 0 14px}
   <div class="titel">
     <h1>SV-ReportQR</h1>
     <p class="tagline">Dein digitaler Assistent für die Gutachtenerstellung</p>
-    <p class="sub" id="status">Noch keine Tabelle geladen.</p>
+    <p class="sub" id="status">Noch kein Projekt geladen.</p>
   </div>
   <button id="about" type="button">Über</button>
 </header>
@@ -127,16 +167,25 @@ dialog p{margin:0 0 14px}
 <main>
   <section id="v1">
     <div class="bar">
+      <select id="proj" aria-label="Projekt wählen" hidden></select>
+      <button class="btn alt" id="done" hidden>Abschließen</button>
+    </div>
+    <div class="bar">
       <button class="btn" id="load">Excel-Tabelle laden</button>
-      <button class="btn alt" id="clear" hidden>Tabelle entfernen</button>
       <input type="search" id="q" placeholder="Suchen, z. B. 340a">
+      <select id="filter" aria-label="Filter" hidden>
+        <option value="">Alle</option><option value="offen">Offen</option>
+        <option value="teil">Teilweise</option><option value="ok">Erledigt</option>
+      </select>
       <input type="file" id="file" accept=".xlsx,.xls" hidden>
     </div>
+    <div class="legend" id="legend" hidden><span><i style="background:color-mix(in srgb,#2e9d4f 26%,var(--surf))"></i>erledigt</span><span><i style="background:color-mix(in srgb,#f08a00 28%,var(--surf))"></i>teilweise</span><span><i style="background:var(--surf)"></i>offen</span></div>
     <div id="msg"></div>
     <div class="grid" id="grid"></div>
   </section>
   <section id="v2" hidden>
     <p class="note">Diese vier Karten drucken und beim Fotografieren mitführen. Antippen zeigt den Code im Vollbild. Der Inhalt der Codes ist jeweils unter dem Bild angegeben.</p>
+    <div class="bar"><button class="btn alt" id="mehr2">Raumkarten und „Kein Zutritt“ …</button><button class="btn alt" id="print">Karten drucken (A6)</button></div>
     <div class="cards" id="cards"></div>
   </section>
 </main>
@@ -147,6 +196,7 @@ dialog p{margin:0 0 14px}
   <div id="qhead" hidden></div>
   <div id="qrbox"></div>
   <div id="qrname"></div>
+  <div id="qstat" hidden></div>
   <div class="bottom">
     <div id="ktabs" hidden></div>
     <div class="top"><button class="btn alt" id="close">Schließen</button><button class="btn alt" id="kbtn" hidden>Steuerkarten</button><span class="sub" id="cnt"></span></div>
@@ -154,10 +204,25 @@ dialog p{margin:0 0 14px}
   </div>
 </div>
 
-<!-- Rückfrage bei fehlender Nummer -->
+<!-- Rückfragen -->
 <dialog id="dlg">
   <p id="dtext"></p>
   <div class="row"><button class="btn" id="dyes"></button><button class="btn alt" id="dno"></button></div>
+</dialog>
+
+<!-- Erweitert: Raumkarten und Kein Zutritt -->
+<dialog id="mehr">
+  <h3>Raum</h3>
+  <div class="chips" id="raeume"></div>
+  <h3>Wohnung / Geschoss</h3>
+  <div class="feld">
+    <select id="gesch"><option value="">Geschoss</option></select>
+    <select id="lage"><option value="">Lage</option><option>links</option><option>mitte</option><option>rechts</option><option>vorne</option><option>hinten</option></select>
+  </div>
+  <div class="feld"><input id="frei" placeholder="Eigene Angabe, z. B. Whg. 5 Müller"><button class="btn" id="raumok">Raumkarte zeigen</button></div>
+  <h3>Kein Zutritt</h3>
+  <div class="feld"><input id="kzwhg" placeholder="Wohnung (optional), z. B. 2. OG links"><button class="btn warn" id="kzok">Kein Zutritt zeigen</button></div>
+  <div class="row" style="margin-top:14px"><button class="btn alt" id="mehrclose">Schließen</button></div>
 </dialog>
 
 <!-- Über / Lizenz -->
@@ -177,34 +242,47 @@ dialog p{margin:0 0 14px}
   <div class="row"><button class="btn" id="aboutclose">Schließen</button></div>
 </dialog>
 
+<!-- nur für den Druck -->
+<div id="druck"></div>
+
 <script>
 "use strict";
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
-const CONTROL = [                            // Steuerkarten: Beschriftung und Code-Inhalt
+const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
+const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
+const CONTROL = [                            // Steuerkarten: Beschriftung, Kurzname, Code-Inhalt
   {t: "Außenaufnahmen",  k: "Außen", c: "CMD:AUSSEN"},
   {t: "Innenaufnahmen",  k: "Innen", c: "CMD:INNEN"},
   {t: "Start Gutachten", k: "Start", c: "CMD:START"},
   {t: "Stop Gutachten",  k: "Stop",  c: "CMD:STOP"}
 ];
-const SPEICHER = "qr_rows";                  // Schlüssel im Browser-Speicher (bleibt für alte Daten gleich)
+const RAEUME = ["Keller", "Erdgeschoss", "Treppenhaus", "Dachgeschoss", "Dachboden", "Tiefgarage", "Garage", "Allgemeinräume", "Laden", "Büro", "Hof"];
+const GESCHOSSE = ["KG", "EG", "1. OG", "2. OG", "3. OG", "4. OG", "5. OG", "6. OG", "DG"];
+const SPEICHER = "svqr_daten";               // alle Projekte
+const SPEICHER_ALT = "qr_rows";              // Version 1.0/1.1 (wird einmalig übernommen)
+const SPEICHER_RAEUME = "svqr_raeume";       // zuletzt verwendete eigene Raumangaben
+const STATUS = {"": "offen", ok: "erledigt", teil: "teilweise"};
+const STATUS_FOLGE = {"": "ok", ok: "teil", teil: ""};     // Doppeltipp: offen -> erledigt -> teilweise -> offen
 
 const $ = id => document.getElementById(id);
 
 // ---------- Zustand ----------
-let rows = [];            // alle Gebäude: {pos, name, street, nr}
-let shown = [];           // nach Suche gefilterte Gebäude
-let ov = [];              // Liste der Vollbildansicht: {code, label, head}
+let daten = {aktiv: null, projekte: {}};   // gespeicherte Projekte: {datei, rows, status:{name: "ok"|"teil"}}
+let rows = [];            // Gebäude des aktiven Projekts: {pos, name, street, nr}
+let shown = [];           // nach Suche und Filter angezeigte Gebäude
+let ov = [];              // Liste der Vollbildansicht: {code, label, head, name}
 let cur = 0;              // Position in ov
-let haus = false;         // Vollbild zeigt Gebäude (true) oder nur Steuerkarten (false)
-let karten = false;       // im Gebäude-Vollbild: Steuerkarten statt Haus-QR anzeigen
-let kc = 0;               // gewählte Steuerkarte
+let haus = false;         // Vollbild zeigt Gebäude (true) oder nur Karten (false)
+let karten = false;       // im Gebäude-Vollbild: Steuerkarte statt Haus-QR anzeigen
+let kc = 0;               // gewählte Steuerkarte (-1 = Sonderkarte)
+let sonder = null;        // aktuelle Raum- oder Kein-Zutritt-Karte {t, k, c}
 let histOffen = false;    // Vollbild hat einen Verlaufseintrag (für Android-Zurück)
 let tabHist = false;      // Reiter "Steuerkarten" hat einen Verlaufseintrag
-let dateiname = "";       // Name der geladenen Excel-Datei
+let letzterTipp = 0;      // für die Erkennung des Doppeltipps
 
 // QR-Texte mit Umlauten als UTF-8 kodieren (Standard der Bibliothek wäre Latin-1)
 qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(s));
@@ -238,10 +316,50 @@ function qrSvg(text){
     '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
 }
 
+// ---------- Speicher (alle Projekte) ----------
+function speichern(){ try { localStorage.setItem(SPEICHER, JSON.stringify(daten)); } catch (e) {} }
+
+function laden(){
+  try {
+    const d = JSON.parse(localStorage.getItem(SPEICHER) || "null");
+    if (d && d.projekte) daten = d;
+    const alt = JSON.parse(localStorage.getItem(SPEICHER_ALT) || "null");     // Übernahme aus Version 1.1
+    if (alt && alt.rows && !daten.projekte[alt.file]){
+      daten.projekte[alt.file] = {datei: alt.file, rows: alt.rows, status: {}};
+      daten.aktiv = daten.aktiv || alt.file;
+      localStorage.removeItem(SPEICHER_ALT);
+      speichern();
+    }
+  } catch (e) {}
+}
+
+function projekt(){ return daten.projekte[daten.aktiv] || null; }
+function statusVon(name){ const p = projekt(); return (p && p.status[name]) || ""; }
+
+function setzeStatus(name, st){
+  const p = projekt();
+  if (!p) return;
+  if (st) p.status[name] = st; else delete p.status[name];
+  speichern();
+}
+
+/** Projekt aktivieren und alles neu anzeigen. */
+function aktiviere(id){
+  daten.aktiv = id && daten.projekte[id] ? id : null;
+  speichern();
+  const p = projekt();
+  rows = p ? p.rows : [];
+  $("msg").innerHTML = "";
+  $("q").value = "";
+  $("filter").value = "";
+  render();
+}
+
 // ---------- Excel einlesen ----------
 /**
  * Liest das erste Tabellenblatt. Erwartet: Spalte A Nummer, B Straße, C Hausnummer,
  * eine Kopfzeile mit "Strasse"/"Straße" und als Ende die Zeile "Gesamte Anzahl Bilder".
+ * Zeilen ohne Nummer UND ohne Hausnummer (z. B. "LOS 2") gelten als Zwischenüberschrift.
  */
 function parseSheet(buf){
   const wb = XLSX.read(buf, {type: "array"});
@@ -254,13 +372,15 @@ function parseSheet(buf){
   if (head < 0) head = Math.max(-1, 1 - off);       // Ersatz: Kopfzeile in Excel-Zeile 2
   for (let i = head + 1; i < data.length; i++){
     const r = data[i];
-    if (/gesamte/i.test(r.join(" "))) break;          // Summenzeile = Tabellenende
+    if (/gesamte anzahl/i.test(r.join(" "))) break;   // Summenzeile = Tabellenende
     const street = clean(r[1]);
     if (!street) continue;                            // Zeilen ohne Straße werden übergangen
     let pos = clean(r[0]);
+    const nr = clean(r[2]);
+    if (!pos && !nr) continue;                        // Zwischenüberschrift wie "LOS 2"
     if (/^\d+$/.test(pos)) pos = String(parseInt(pos, 10));   // führende Nullen später einheitlich setzen
     if (/^extra$/i.test(pos)) pos = "EXTRA";
-    out.push({line: off + i + 1, pos, street, nr: clean(r[2])});
+    out.push({line: off + i + 1, pos, street, nr});
   }
   return out;
 }
@@ -312,45 +432,75 @@ async function importFile(file){
   for (const x of keep){ x.name = nameOf(x); if (seen[x.name]) dup.push(x.name); seen[x.name] = 1; }
   if (dup.length) msgs.push("Achtung, doppelte Ordnernamen: " + dup.join(", "));
 
-  rows = keep.map(x => ({pos: x.pos, name: x.name, street: x.street, nr: x.nr}));
-  try { localStorage.setItem(SPEICHER, JSON.stringify({file: file.name, rows})); } catch (e) {}
-  dateiname = file.name;
-  $("status").textContent = file.name + " · " + rows.length + " Gebäude";
+  // Projekt anlegen oder aktualisieren (gleicher Dateiname = gleiches Projekt, Status bleibt erhalten)
+  const vorhanden = daten.projekte[file.name];
+  if (vorhanden) msgs.push("Projekt „" + file.name + "“ aktualisiert, der Status der Gebäude bleibt erhalten.");
+  daten.projekte[file.name] = {
+    datei: file.name,
+    rows: keep.map(x => ({pos: x.pos, name: x.name, street: x.street, nr: x.nr})),
+    status: vorhanden ? vorhanden.status : {}
+  };
+  aktiviere(file.name);
   // Protokoll einklappbar, damit man nicht weit scrollen muss
   $("msg").innerHTML = msgs.length ? '<details class="log" open><summary>Protokoll (' + msgs.length + ')</summary><div class="logbody">' +
     msgs.map(m => '<p class="note' + (/Achtung/.test(m) ? " err" : "") + '">' + esc(m) + "</p>").join("") + "</div></details>" : "";
-  render();
 }
 
 // ---------- Gebäudeliste ----------
 function render(){
-  $("clear").hidden = !rows.length;                 // "Tabelle entfernen" nur mit geladener Tabelle
-  const f = $("q").value.trim().toLowerCase();
-  shown = rows.filter(r => !f || r.name.toLowerCase().includes(f));
+  const p = projekt();
+  const ids = Object.keys(daten.projekte);
+  $("proj").hidden = !ids.length;
+  $("proj").innerHTML = ids.map(id => '<option value="' + esc(id) + '"' + (id === daten.aktiv ? " selected" : "") + ">" +
+    esc(id) + "</option>").join("") + (p ? "" : '<option value="" selected>Projekt wählen …</option>');
+  $("done").hidden = $("filter").hidden = $("legend").hidden = !rows.length;
+
   if (!rows.length){
+    $("status").textContent = ids.length ? "Kein Projekt gewählt." : "Noch kein Projekt geladen.";
     $("grid").innerHTML = '<div class="empty" style="grid-column:1/-1">Excel-Tabelle laden, um die Gebäude-Buttons zu erzeugen.</div>';
     return;
   }
-  $("grid").innerHTML = shown.map((r, i) =>
-    '<button class="house" data-i="' + i + '"><b>' + esc(r.pos) + "</b><span>" + esc([r.street, r.nr].filter(Boolean).join(" ")) + "</span></button>").join("");
+  const n = {ok: 0, teil: 0};
+  rows.forEach(r => { const st = statusVon(r.name); if (st) n[st]++; });
+  $("status").textContent = p.datei + " · " + rows.length + " Gebäude · " + n.ok + " erledigt · " + n.teil + " teilweise · " +
+    (rows.length - n.ok - n.teil) + " offen";
+
+  const f = $("q").value.trim().toLowerCase();
+  const fs = $("filter").value;
+  shown = rows.filter(r => (!f || r.name.toLowerCase().includes(f)) &&
+    (!fs || (fs === "offen" ? !statusVon(r.name) : statusVon(r.name) === fs)));
+  $("grid").innerHTML = shown.map((r, i) => {
+    const st = statusVon(r.name);
+    return '<button class="house' + (st ? " " + st : "") + '" data-i="' + i + '"><b>' + esc(r.pos) + "</b><span>" +
+      esc([r.street, r.nr].filter(Boolean).join(" ")) + "</span></button>";
+  }).join("") || '<div class="empty" style="grid-column:1/-1">Keine Gebäude für diese Suche oder diesen Filter.</div>';
 }
 
 // ---------- Vollbildansicht ----------
-/** Zeigt Eintrag i der Liste ov. Im Gebäude-Modus mit Steuerkarten: gewählte Karte mit Adresse darüber. */
+function aktuelleKarte(){ return kc >= 0 ? CONTROL[kc] : sonder; }
+
+/** Zeigt Eintrag i der Liste ov. Im Gebäude-Modus mit Karte: Karte mit Adresse darüber. */
 function openQr(i){
   if (!ov.length) return;
   cur = (i + ov.length) % ov.length;
   const r = ov[cur];
   const k = haus && karten;
-  $("qrbox").innerHTML = qrSvg(k ? CONTROL[kc].c : r.code);
-  $("qrname").textContent = k ? CONTROL[kc].t : r.label;
+  const karte = aktuelleKarte();
+  $("qrbox").innerHTML = qrSvg(k ? karte.c : r.code);
+  $("qrname").textContent = k ? karte.t : r.label;
   $("qhead").textContent = k ? r.head : "";
   $("qhead").hidden = !k;
   $("ktabs").hidden = !k;
   $("kbtn").hidden = !haus;
   $("kbtn").textContent = k ? "Haus-QR" : "Steuerkarten";
-  Array.from($("ktabs").children).forEach((b, j) => b.setAttribute("aria-pressed", j === kc));
+  Array.from($("ktabs").children).forEach((b, j) => b.setAttribute("aria-pressed", j === kc || (kc < 0 && j === CONTROL.length)));
   $("cnt").textContent = (cur + 1) + " von " + ov.length;
+  const zeigeStatus = haus && !k;
+  $("qstat").hidden = !zeigeStatus;
+  if (zeigeStatus){
+    const st = statusVon(r.name);
+    $("qstat").innerHTML = 'Status: <b class="' + st + '">' + STATUS[st] + "</b> · Doppeltipp auf den Code ändert";
+  }
   const warOffen = $("qrov").classList.contains("on");
   $("qrov").classList.add("on");
   if (!warOffen){            // Verlaufseintrag: Android-Zurück schließt das Vollbild
@@ -358,36 +508,71 @@ function openQr(i){
   }
 }
 
-function closeQr(){ $("qrov").classList.remove("on"); histOffen = false; }
+function closeQr(){ $("qrov").classList.remove("on"); histOffen = false; render(); }
 
 function tab(n){
   $("v1").hidden = n !== 1; $("v2").hidden = n !== 2;
   $("t1").setAttribute("aria-selected", n === 1); $("t2").setAttribute("aria-selected", n === 2);
 }
 
+/** Zeigt eine Raum- oder Kein-Zutritt-Karte: im Gebäude als Karte, sonst allein im Vollbild. */
+function zeigeSonder(karte){
+  sonder = karte;
+  $("mehr").close();
+  if ($("qrov").classList.contains("on") && haus){ karten = true; kc = -1; openQr(cur); return; }
+  haus = false; karten = false; kc = -1;
+  ov = [{code: karte.c, label: karte.t}];
+  openQr(0);
+}
+
+function merkeRaum(text){
+  try {
+    const l = JSON.parse(localStorage.getItem(SPEICHER_RAEUME) || "[]").filter(x => x !== text);
+    l.unshift(text);
+    localStorage.setItem(SPEICHER_RAEUME, JSON.stringify(l.slice(0, 8)));
+  } catch (e) {}
+}
+
+function oeffneMehr(){
+  let eigene = [];
+  try { eigene = JSON.parse(localStorage.getItem(SPEICHER_RAEUME) || "[]"); } catch (e) {}
+  const alle = eigene.concat(RAEUME.filter(r => !eigene.includes(r)));
+  $("raeume").innerHTML = alle.map(r => '<button class="btn alt" data-r="' + esc(r) + '">' + esc(r) + "</button>").join("");
+  $("gesch").value = ""; $("lage").value = ""; $("frei").value = ""; $("kzwhg").value = "";
+  $("mehr").showModal();
+}
+
+function raumKarte(text){
+  const r = clean(text);
+  if (!r) return;
+  merkeRaum(r);
+  zeigeSonder({t: "Innen: " + r, k: "Raum", c: RAUM + r});
+}
+
 // ---------- Ereignisse ----------
 $("load").onclick = () => $("file").click();
 $("file").onchange = e => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ""; };
 $("q").oninput = render;
+$("filter").onchange = render;
+$("proj").onchange = e => aktiviere(e.target.value);
 
-// Tabelle entfernen: App startet wieder leer (auch der Browser-Speicher wird gelöscht)
-$("clear").onclick = async () => {
-  const name = dateiname ? "„" + dateiname + "“" : "die geladene Tabelle";
-  const ok = await ask("Soll " + name + " mit " + rows.length + " Gebäuden entfernt werden? Die App startet danach leer.", "Tabelle entfernen", "Abbrechen");
+// Projekt abschließen: gibt den Speicher frei, andere Projekte bleiben erhalten
+$("done").onclick = async () => {
+  const p = projekt();
+  if (!p) return;
+  const ok = await ask("Projekt „" + p.datei + "“ abschließen? Tabelle und Status der " + p.rows.length +
+    " Gebäude werden von diesem Gerät gelöscht.", "Projekt abschließen", "Abbrechen");
   if (!ok) return;
-  rows = []; shown = []; dateiname = "";
-  try { localStorage.removeItem(SPEICHER); } catch (e) {}
-  $("q").value = "";
-  $("msg").innerHTML = "";
-  $("status").textContent = "Noch keine Tabelle geladen.";
-  render();
+  delete daten.projekte[p.datei];
+  const rest = Object.keys(daten.projekte);
+  aktiviere(rest.length ? rest[0] : null);
 };
 
 $("grid").onclick = e => {
   const b = e.target.closest(".house");
   if (!b) return;
-  haus = true; karten = false;
-  ov = shown.map(r => ({code: PREFIX + r.name, label: r.name, head: [r.street, r.nr].filter(Boolean).join(" ")}));
+  haus = true; karten = false; kc = 0;
+  ov = shown.map(r => ({code: PREFIX + r.name, label: r.name, name: r.name, head: [r.street, r.nr].filter(Boolean).join(" ")}));
   openQr(+b.dataset.i);
 };
 
@@ -398,21 +583,52 @@ $("close").onclick = () => {
 
 // Android-Zurück (Taste oder Wischgeste): erst Vollbild schließen, dann Reiter "Steuerkarten" -> "Gebäude"
 window.addEventListener("popstate", () => {
+  if ($("mehr").open){ $("mehr").close(); }
   if ($("qrov").classList.contains("on")){ closeQr(); return; }
   if (!$("v2").hidden){ tabHist = false; tab(1); }
 });
 
-// Antippen des QR-Codes: Steuerkarten rotieren (Außen, Innen, Start, Stop); Haus-QR reagiert nicht
+// Antippen des QR-Codes:
+//   Steuerkarten: wechseln reihum (Außen, Innen, Start, Stop)
+//   Haus-QR: Doppeltipp schaltet den Status (offen -> erledigt -> teilweise -> offen)
 $("qrbox").onclick = () => {
-  if (haus && karten){ kc = (kc + 1) % CONTROL.length; openQr(cur); }
-  else if (!haus){ openQr(cur + 1); }
+  if (haus && karten){ kc = (kc + 1) % CONTROL.length; openQr(cur); return; }
+  if (!haus){ if (ov.length > 1) openQr(cur + 1); return; }
+  const jetzt = Date.now();
+  if (jetzt - letzterTipp < 400){
+    const name = ov[cur].name;
+    setzeStatus(name, STATUS_FOLGE[statusVon(name)]);
+    letzterTipp = 0;
+    openQr(cur);
+  } else letzterTipp = jetzt;
 };
 // Weiter/Zurück wechseln das Gebäude und zeigen immer zuerst den Haus-QR
 $("prev").onclick = () => { karten = false; openQr(cur - 1); };
 $("next").onclick = () => { karten = false; openQr(cur + 1); };
-$("kbtn").onclick = () => { karten = !karten; openQr(cur); };
-$("ktabs").innerHTML = CONTROL.map((c, j) => '<button class="btn alt" data-k="' + j + '">' + c.k + "</button>").join("");
-$("ktabs").onclick = e => { const b = e.target.closest("button"); if (b){ kc = +b.dataset.k; openQr(cur); } };
+$("kbtn").onclick = () => { karten = !karten; if (kc < 0 && !sonder) kc = 0; openQr(cur); };
+$("ktabs").innerHTML = CONTROL.map((c, j) => '<button class="btn alt" data-k="' + j + '">' + c.k + "</button>").join("") +
+  '<button class="btn alt" data-k="mehr">Mehr …</button>';
+$("ktabs").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.k === "mehr"){ oeffneMehr(); return; }
+  kc = +b.dataset.k; openQr(cur);
+};
+
+// Erweitert: Raumkarten und Kein Zutritt
+$("gesch").innerHTML += GESCHOSSE.map(g => "<option>" + g + "</option>").join("");
+$("raeume").onclick = e => { const b = e.target.closest("button"); if (b) raumKarte(b.dataset.r); };
+$("raumok").onclick = () => {
+  const text = [$("gesch").value, $("lage").value, $("frei").value].map(clean).filter(Boolean).join(" ");
+  if (!text){ $("frei").focus(); return; }
+  raumKarte(text);
+};
+$("kzok").onclick = () => {
+  const whg = clean($("kzwhg").value || [$("gesch").value, $("lage").value].filter(Boolean).join(" "));
+  zeigeSonder({t: "Kein Zutritt" + (whg ? ": " + whg : ""), k: "Kein Zutritt", c: KEINZUTRITT + (whg ? ":" + whg : "")});
+};
+$("mehrclose").onclick = () => $("mehr").close();
+$("mehr2").onclick = oeffneMehr;
 
 $("t1").onclick = () => {
   if (tabHist){ history.back(); setTimeout(() => { if (!$("v2").hidden){ tabHist = false; tab(1); } }, 200); }
@@ -430,21 +646,30 @@ $("cards").innerHTML = CONTROL.map((c, i) =>
 $("cards").onclick = e => {
   const b = e.target.closest(".card");
   if (!b) return;
-  haus = false; karten = false;
+  haus = false; karten = false; kc = 0;
   ov = CONTROL.map(c => ({code: c.c, label: c.t}));
   openQr(+b.dataset.i);
+};
+
+// Drucken: vier Steuerkarten im Format A6 auf einer A4-Seite (Schnittlinien gestrichelt)
+$("print").onclick = () => {
+  $("druck").innerHTML = CONTROL.map(c => '<div class="pk">' + qrSvg(c.c) + "<h2>" + c.t + "</h2><small>" + c.c +
+    " · SV-ReportQR</small></div>").join("");
+  window.print();
 };
 
 $("ver").textContent = VERSION;
 $("about").onclick = () => $("aboutdlg").showModal();
 $("aboutclose").onclick = () => $("aboutdlg").close();
 
-// ---------- Start: zuletzt geladene Tabelle wiederherstellen ----------
-try {
-  const s = JSON.parse(localStorage.getItem(SPEICHER) || "null");
-  if (s && s.rows){ rows = s.rows; dateiname = s.file || ""; $("status").textContent = s.file + " · " + rows.length + " Gebäude"; }
-} catch (e) {}
-render();
+// ---------- Start ----------
+laden();
+aktiviere(daten.aktiv);
+
+// Offline-Betrieb: Service Worker speichert App und Bibliotheken (nur über https, z. B. GitHub Pages)
+if ("serviceWorker" in navigator && location.protocol === "https:"){
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>

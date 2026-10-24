@@ -39,6 +39,10 @@ python-docx
   Copyright (c) 2013 Steve Canny, https://github.com/scanny
   Lizenz: MIT License (Text siehe unten)
 
+openpyxl
+  Copyright (c) 2010 openpyxl
+  Lizenz: MIT License (Text siehe unten)
+
 lxml (wird von python-docx verwendet)
   Copyright (c) 2004 Infrae. All rights reserved.
   Lizenz: BSD 3-Clause License
@@ -72,7 +76,7 @@ qrcode-generator 1.4.4
   The word "QR Code" is registered trademark of DENSO WAVE INCORPORATED.
 
 ======================================================================
-MIT License (Wortlaut, gilt für python-docx und qrcode-generator
+MIT License (Wortlaut, gilt für python-docx, openpyxl und qrcode-generator
 mit dem jeweils oben genannten Copyright-Vermerk)
 ======================================================================
 
