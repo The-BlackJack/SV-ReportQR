@@ -8,7 +8,7 @@
   - Bibliotheken von cdnjs: immer aus dem Speicher (die Versionen ändern sich nie)
   Bei einer neuen App-Version CACHE erhöhen, dann wird der alte Speicher gelöscht.
 */
-const CACHE = "svqr-1.3.0";
+const CACHE = "svqr-1.4.0";
 const DATEIEN = [
   "./", "index.html", "manifest.webmanifest", "LICENSE.txt",
   "favicon-32.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png",

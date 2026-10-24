@@ -71,6 +71,8 @@ input[type=search]{flex:1;min-width:140px;min-height:48px;border:1px solid var(-
 .house{background:var(--surf);color:var(--ink);border:1px solid var(--line);border-left:6px solid var(--acc);border-radius:6px;text-align:left;padding:10px;font:inherit;min-height:64px}
 .house b{display:block;font-size:1.15rem}
 .house span{color:var(--mute);font-size:.88rem}
+.house.add{border:2px dashed var(--line);border-left-width:2px;background:none;text-align:center;font-weight:700;color:var(--mute)}
+.house small{display:block;color:var(--mute);font-size:.75rem}
 .empty{border:2px dashed var(--line);border-radius:8px;padding:28px 16px;text-align:center;color:var(--mute)}
 .note{background:var(--surf);border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px;font-size:.92rem}
 .note.err{border-color:var(--err)}
@@ -205,7 +207,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   <div id="qstat" hidden></div>
   <div class="bottom">
     <div id="ktabs" hidden></div>
-    <div class="top"><button class="btn alt" id="close">Schließen</button><button class="btn alt" id="kbtn" hidden>Steuerkarten</button><span class="sub" id="cnt"></span></div>
+    <div class="top"><button class="btn alt" id="close">Schließen</button><button class="btn alt" id="kbtn" hidden>Steuerkarten</button><button class="btn alt" id="entf" hidden>Entfernen</button><span class="sub" id="cnt"></span></div>
     <div class="nav2"><button class="btn alt" id="prev">Zurück</button><button class="btn alt" id="next">Weiter</button></div>
   </div>
 </div>
@@ -229,6 +231,16 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   <h3>Kein Zutritt</h3>
   <div class="feld"><input id="kzwhg" placeholder="Wohnung (optional), z. B. 2. OG links"><button class="btn warn" id="kzok">Kein Zutritt zeigen</button></div>
   <div class="row" style="margin-top:14px"><button class="btn alt" id="mehrclose">Schließen</button></div>
+</dialog>
+
+<!-- Gebäude hinzufügen -->
+<dialog id="neu">
+  <h3 style="margin:0 0 4px">Gebäude hinzufügen</h3>
+  <p class="sub" style="margin:0 0 10px">Das Gebäude wird mit EXTRA am Ende der Liste angefügt, z. B. „EXTRA_Hauptstraße_5“.</p>
+  <div class="feld"><input id="neustr" placeholder="Straße (Pflicht)" autocomplete="off"></div>
+  <div class="feld"><input id="neunr" placeholder="Hausnummer (optional)" autocomplete="off"></div>
+  <p class="note err" id="neufehler" hidden></p>
+  <div class="row" style="margin-top:12px"><button class="btn" id="neuok">Hinzufügen</button><button class="btn alt" id="neuab">Abbrechen</button></div>
 </dialog>
 
 <!-- Über / Lizenz -->
@@ -256,7 +268,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
 const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
@@ -445,7 +457,9 @@ async function importFile(file){
   if (vorhanden) msgs.push("Projekt „" + file.name + "“ aktualisiert, der Status der Gebäude bleibt erhalten.");
   daten.projekte[file.name] = {
     datei: file.name,
-    rows: keep.map(x => ({pos: x.pos, name: x.name, street: x.street, nr: x.nr})),
+    // in der App hinzugefügte Gebäude (neu: true) bleiben beim erneuten Laden der Tabelle erhalten
+    rows: keep.map(x => ({pos: x.pos, name: x.name, street: x.street, nr: x.nr}))
+      .concat(vorhanden ? vorhanden.rows.filter(r => r.neu && !seen[r.name]) : []),
     status: vorhanden ? vorhanden.status : {},
     zeit: vorhanden ? (vorhanden.zeit || {}) : {}
   };
@@ -481,8 +495,8 @@ function render(){
   $("grid").innerHTML = shown.map((r, i) => {
     const st = statusVon(r.name);
     return '<button class="house' + (st ? " " + st : "") + '" data-i="' + i + '"><b>' + esc(r.pos) + "</b><span>" +
-      esc([r.street, r.nr].filter(Boolean).join(" ")) + "</span></button>";
-  }).join("") || '<div class="empty" style="grid-column:1/-1">Keine Gebäude für diese Suche oder diesen Filter.</div>';
+      esc([r.street, r.nr].filter(Boolean).join(" ")) + "</span>" + (r.neu ? "<small>hinzugefügt</small>" : "") + "</button>";
+  }).join("") + '<button class="house add" id="addb">+ Gebäude hinzufügen</button>';
 }
 
 // ---------- Vollbildansicht ----------
@@ -501,6 +515,7 @@ function openQr(i){
   $("qhead").hidden = !k;
   $("ktabs").hidden = !k;
   $("kbtn").hidden = !haus;
+  $("entf").hidden = !(haus && !k && r.neu);          // nur in der App hinzugefügte Gebäude
   $("kbtn").textContent = k ? "Haus-QR" : "Steuerkarten";
   Array.from($("ktabs").children).forEach((b, j) => b.setAttribute("aria-pressed", j === kc || (kc < 0 && j === CONTROL.length)));
   $("cnt").textContent = (cur + 1) + " von " + ov.length;
@@ -582,10 +597,11 @@ $("done").onclick = async () => {
 };
 
 $("grid").onclick = e => {
+  if (e.target.closest("#addb")){ neuOeffnen(); return; }
   const b = e.target.closest(".house");
   if (!b) return;
   haus = true; karten = false; kc = 0;
-  ov = shown.map(r => ({code: PREFIX + r.name, label: r.name, name: r.name, head: [r.street, r.nr].filter(Boolean).join(" ")}));
+  ov = shown.map(r => ({code: PREFIX + r.name, label: r.name, name: r.name, neu: r.neu, head: [r.street, r.nr].filter(Boolean).join(" ")}));
   openQr(+b.dataset.i);
 };
 
@@ -618,6 +634,52 @@ $("qrbox").onclick = () => {
 // Weiter/Zurück wechseln das Gebäude und zeigen immer zuerst den Haus-QR
 $("prev").onclick = () => { karten = false; openQr(cur - 1); };
 $("next").onclick = () => { karten = false; openQr(cur + 1); };
+// ---------- Gebäude hinzufügen / entfernen ----------
+function neuOeffnen(){
+  $("neustr").value = "";
+  $("neunr").value = "";
+  $("neufehler").hidden = true;
+  $("neu").showModal();
+  $("neustr").focus();
+}
+
+function neuSpeichern(){
+  const p = projekt();
+  const street = clean($("neustr").value), nr = clean($("neunr").value);
+  if (!street){ $("neufehler").textContent = "Bitte die Straße eintragen."; $("neufehler").hidden = false; return; }
+  const r = {pos: "EXTRA", street, nr, neu: true};
+  r.name = nameOf(r);
+  if (p.rows.some(x => x.name === r.name)){
+    $("neufehler").textContent = "„" + r.name + "“ gibt es schon in der Liste.";
+    $("neufehler").hidden = false;
+    return;
+  }
+  p.rows.push(r);
+  speichern();
+  $("neu").close();
+  $("q").value = ""; $("filter").value = "";
+  render();
+  // gleich den QR-Code des neuen Gebäudes zeigen
+  haus = true; karten = false; kc = 0;
+  ov = shown.map(x => ({code: PREFIX + x.name, label: x.name, name: x.name, neu: x.neu, head: [x.street, x.nr].filter(Boolean).join(" ")}));
+  openQr(shown.findIndex(x => x.name === r.name));
+}
+
+$("neuok").onclick = neuSpeichern;
+$("neuab").onclick = () => $("neu").close();
+$("neunr").onkeydown = e => { if (e.key === "Enter") neuSpeichern(); };
+$("entf").onclick = async () => {
+  const r = ov[cur];
+  if (!r || !r.neu) return;
+  if (!await ask("Das hinzugefügte Gebäude „" + r.label + "“ aus der Liste entfernen?", "Entfernen", "Abbrechen")) return;
+  const p = projekt();
+  p.rows = p.rows.filter(x => x.name !== r.name);
+  delete p.status[r.name];
+  rows = p.rows;
+  speichern();
+  $("close").click();
+};
+
 $("kbtn").onclick = () => { karten = !karten; if (kc < 0 && !sonder) kc = 0; openQr(cur); };
 $("ktabs").innerHTML = CONTROL.map((c, j) => '<button class="btn alt" data-k="' + j + '">' + c.k + "</button>").join("") +
   '<button class="btn alt" data-k="mehr">Mehr …</button>';
@@ -746,7 +808,12 @@ async function statusUebernehmen(file){
       id = paket.projekt;
     }
   }
-  const n = zusammenfuehren(daten.projekte[id], paket);
+  // Gebäude, die der Kollege in der App hinzugefügt hat, übernehmen
+  const ziel = daten.projekte[id];
+  for (const r of paket.rows){
+    if (r.neu && !ziel.rows.some(x => x.name === r.name)) ziel.rows.push(r);
+  }
+  const n = zusammenfuehren(ziel, paket);
   speichern();
   aktiviere(id);
   const von = paket.erstellt ? new Date(paket.erstellt).toLocaleString("de-DE", {dateStyle: "short", timeStyle: "short"}) : "";
