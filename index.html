@@ -13,9 +13,10 @@
 
   Inhalt der QR-Codes (muss zu SV-ReportAssist passen):
     Gebäude:       ORDNER:<Nr>_<Straße>_<Hausnummer>, z. B. ORDNER:01_Neusser Landstraße_301
-    Steuerkarten:  CMD:AUSSEN, CMD:INNEN, CMD:START, CMD:STOP
+    Steuerkarten:  CMD:AUSSEN, CMD:INNEN, CMD:INNENOHNESCHAEDEN, CMD:START, CMD:STOP
     Raumkarten:    CMD:RAUM:<Raum>, z. B. CMD:RAUM:EG links  (gilt als Innen, Unterordner + Bildunterschrift)
     Kein Zutritt:  CMD:KEINZUTRITT oder CMD:KEINZUTRITT:<Wohnung>
+    Innen keine Schäden: CMD:INNENOHNESCHAEDEN  (Satz statt Bild im Block Innen des Gutachtens)
 
   Daten im Browser (localStorage, Schlüssel "svqr_daten"): alle Projekte mit Tabelle, Status
   der Gebäude und Zeitpunkt jeder Statusänderung. "Status teilen" verschickt das als JSON-Datei,
@@ -197,7 +198,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
     <div class="grid" id="grid"></div>
   </section>
   <section id="v2" hidden>
-    <p class="note">Diese vier Karten drucken und beim Fotografieren mitführen. Antippen zeigt den Code im Vollbild. Der Inhalt der Codes ist jeweils unter dem Bild angegeben.</p>
+    <p class="note">Diese fünf Karten drucken und beim Fotografieren mitführen. Antippen zeigt den Code im Vollbild. Der Inhalt der Codes ist jeweils unter dem Bild angegeben.</p>
     <div class="bar"><button class="btn alt" id="mehr2">Raumkarten und „Kein Zutritt“ …</button><button class="btn alt" id="print">Karten drucken (A6)</button></div>
     <div class="cards" id="cards"></div>
   </section>
@@ -276,13 +277,14 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.4.1";
+const VERSION = "1.5.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
 const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
 const CONTROL = [                            // Steuerkarten: Beschriftung, Kurzname, Code-Inhalt
   {t: "Außenaufnahmen",  k: "Außen", c: "CMD:AUSSEN"},
   {t: "Innenaufnahmen",  k: "Innen", c: "CMD:INNEN"},
+  {t: "Innen keine Schäden", k: "Keine Schäden", c: "CMD:INNENOHNESCHAEDEN"},
   {t: "Start Gutachten", k: "Start", c: "CMD:START"},
   {t: "Stop Gutachten",  k: "Stop",  c: "CMD:STOP"}
 ];
@@ -626,7 +628,7 @@ window.addEventListener("popstate", () => {
 });
 
 // Antippen des QR-Codes:
-//   Steuerkarten: wechseln reihum (Außen, Innen, Start, Stop)
+//   Steuerkarten: wechseln reihum (Außen, Innen, Keine Schäden, Start, Stop)
 //   Haus-QR: Doppeltipp schaltet den Status (offen -> erledigt -> teilweise -> offen)
 $("qrbox").onclick = () => {
   if (haus && karten){ kc = (kc + 1) % CONTROL.length; openQr(cur); return; }
@@ -734,7 +736,7 @@ $("cards").onclick = e => {
   openQr(+b.dataset.i);
 };
 
-// Drucken: vier Steuerkarten im Format A6 auf einer A4-Seite (Schnittlinien gestrichelt)
+// Drucken: Steuerkarten im Format A6, vier auf einer A4-Seite (Schnittlinien gestrichelt)
 $("print").onclick = () => {
   $("druck").innerHTML = CONTROL.map(c => '<div class="pk">' + qrSvg(c.c) + "<h2>" + c.t + "</h2><small>" + c.c +
     " · SV-ReportQR</small></div>").join("");
