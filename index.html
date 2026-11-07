@@ -141,6 +141,12 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 #mehr h3:first-child{margin-top:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips .btn{min-height:44px;padding:8px 12px;font-weight:600}
+.kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px}
+.kopf h3{margin:0!important}
+.kopf .btn{min-height:36px;padding:4px 12px;font-size:.9rem}
+#raeume.bearb .btn{border-style:dashed}
+#raeume.bearb .btn::before{content:"✕ ";color:#b3261e}
+#raumopt{margin-top:8px}
 .feld{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .feld input,.feld select{flex:1;min-width:110px;min-height:44px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);padding:0 10px;font:inherit}
 .btn.warn{background:#b3261e;color:#fff}
@@ -226,8 +232,12 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 
 <!-- Erweitert: Raumkarten und Kein Zutritt -->
 <dialog id="mehr">
-  <h3>Raum</h3>
+  <div class="kopf"><h3>Raum</h3><button class="btn alt" id="raumbearb" aria-pressed="false">Bearbeiten</button></div>
   <div class="chips" id="raeume"></div>
+  <div class="bar" id="raumopt" hidden>
+    <span class="sub">Antippen entfernt den Raum aus der Liste.</span>
+    <button class="btn alt" id="raumstd">Standardliste wiederherstellen</button>
+  </div>
   <h3>Wohnung / Geschoss</h3>
   <div class="feld">
     <select id="gesch"><option value="">Geschoss</option></select>
@@ -277,7 +287,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.5.0";
+const VERSION = "1.5.1";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
 const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
@@ -293,6 +303,7 @@ const GESCHOSSE = ["KG", "EG", "1. OG", "2. OG", "3. OG", "4. OG", "5. OG", "6. 
 const SPEICHER = "svqr_daten";               // alle Projekte
 const SPEICHER_ALT = "qr_rows";              // Version 1.0/1.1 (wird einmalig übernommen)
 const SPEICHER_RAEUME = "svqr_raeume";       // zuletzt verwendete eigene Raumangaben
+const SPEICHER_RAEUME_AUS = "svqr_raeume_aus"; // ausgeblendete Standardräume
 const STATUS = {"": "offen", ok: "erledigt", teil: "teilweise"};
 const STATUS_FOLGE = {"": "ok", ok: "teil", teil: ""};     // Doppeltipp: offen -> erledigt -> teilweise -> offen
 
@@ -567,11 +578,43 @@ function merkeRaum(text){
   } catch (e) {}
 }
 
+function liesListe(schluessel){
+  try { const l = JSON.parse(localStorage.getItem(schluessel) || "[]"); return Array.isArray(l) ? l : []; }
+  catch (e) { return []; }
+}
+function schreibListe(schluessel, liste){
+  try { if (liste.length) localStorage.setItem(schluessel, JSON.stringify(liste)); else localStorage.removeItem(schluessel); }
+  catch (e) {}
+}
+
+// Raumliste: zuletzt verwendete vorn, dann die Standardräume (ohne ausgeblendete)
+function zeigeRaeume(){
+  const eigene = liesListe(SPEICHER_RAEUME), aus = liesListe(SPEICHER_RAEUME_AUS);
+  const alle = eigene.concat(RAEUME.filter(r => !eigene.includes(r) && !aus.includes(r)));
+  $("raeume").innerHTML = alle.length
+    ? alle.map(r => '<button class="btn alt" data-r="' + esc(r) + '">' + esc(r) + "</button>").join("")
+    : '<span class="sub">Keine Räume in der Liste.</span>';
+}
+
+function raumBearbeiten(an){
+  $("raeume").classList.toggle("bearb", an);
+  $("raumopt").hidden = !an;
+  $("raumbearb").textContent = an ? "Fertig" : "Bearbeiten";
+  $("raumbearb").setAttribute("aria-pressed", an);
+}
+
+function raumEntfernen(r){
+  schreibListe(SPEICHER_RAEUME, liesListe(SPEICHER_RAEUME).filter(x => x !== r));
+  if (RAEUME.includes(r)){
+    const aus = liesListe(SPEICHER_RAEUME_AUS);
+    if (!aus.includes(r)) schreibListe(SPEICHER_RAEUME_AUS, aus.concat(r));
+  }
+  zeigeRaeume();
+}
+
 function oeffneMehr(){
-  let eigene = [];
-  try { eigene = JSON.parse(localStorage.getItem(SPEICHER_RAEUME) || "[]"); } catch (e) {}
-  const alle = eigene.concat(RAEUME.filter(r => !eigene.includes(r)));
-  $("raeume").innerHTML = alle.map(r => '<button class="btn alt" data-r="' + esc(r) + '">' + esc(r) + "</button>").join("");
+  raumBearbeiten(false);
+  zeigeRaeume();
   $("gesch").value = ""; $("lage").value = ""; $("frei").value = ""; $("kzwhg").value = "";
   $("mehr").showModal();
 }
@@ -702,7 +745,19 @@ $("ktabs").onclick = e => {
 
 // Erweitert: Raumkarten und Kein Zutritt
 $("gesch").innerHTML += GESCHOSSE.map(g => "<option>" + g + "</option>").join("");
-$("raeume").onclick = e => { const b = e.target.closest("button"); if (b) raumKarte(b.dataset.r); };
+$("raeume").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if ($("raeume").classList.contains("bearb")) raumEntfernen(b.dataset.r);
+  else raumKarte(b.dataset.r);
+};
+$("raumbearb").onclick = () => raumBearbeiten(!$("raeume").classList.contains("bearb"));
+$("raumstd").onclick = async () => {
+  if (!await ask("Eigene Räume löschen und die Standardliste wiederherstellen?", "Wiederherstellen", "Abbrechen")) return;
+  schreibListe(SPEICHER_RAEUME, []);
+  schreibListe(SPEICHER_RAEUME_AUS, []);
+  zeigeRaeume();
+};
 $("raumok").onclick = () => {
   const text = [$("gesch").value, $("lage").value, $("frei").value].map(clean).filter(Boolean).join(" ");
   if (!text){ $("frei").focus(); return; }
