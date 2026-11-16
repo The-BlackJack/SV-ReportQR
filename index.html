@@ -15,7 +15,8 @@
     Gebäude:       ORDNER:<Nr>_<Straße>_<Hausnummer>, z. B. ORDNER:01_Neusser Landstraße_301
     Steuerkarten:  CMD:AUSSEN, CMD:INNEN, CMD:INNENOHNESCHAEDEN, CMD:START, CMD:STOP
     Raumkarten:    CMD:RAUM:<Raum>, z. B. CMD:RAUM:EG links  (gilt als Innen, Unterordner + Bildunterschrift)
-    Kein Zutritt:  CMD:KEINZUTRITT oder CMD:KEINZUTRITT:<Wohnung>
+    Kein Zutritt:  CMD:KEINZUTRITT oder CMD:KEINZUTRITT:<Wohnung>;<Grund>  (Wohnung oder Grund dürfen fehlen,
+                   z. B. CMD:KEINZUTRITT:2. OG links;Keiner da oder CMD:KEINZUTRITT:;Zutritt verweigert)
     Innen keine Schäden: CMD:INNENOHNESCHAEDEN  (Satz statt Bild im Block Innen des Gutachtens)
 
   Daten im Browser (localStorage, Schlüssel "svqr_daten"): alle Projekte mit Tabelle, Status
@@ -130,8 +131,15 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 #filter{flex:0 0 auto}
 .house.ok{background:color-mix(in srgb,#2e9d4f 26%,var(--surf));border-left-color:#2e9d4f}
 .house.teil{background:color-mix(in srgb,#f08a00 28%,var(--surf));border-left-color:#f08a00}
-#qstat{text-align:center;font-size:.92rem;color:var(--mute);margin:0 8px 6px}
-#qstat b.ok{color:#2e9d4f}#qstat b.teil{color:#f08a00}
+#qstat{margin:0 0 8px}
+#qstat .btn{width:100%;min-height:44px;padding:8px 12px;font-weight:600}
+#qstat .btn.ok{background:color-mix(in srgb,#2e9d4f 26%,var(--surf));border-color:#2e9d4f}
+#qstat .btn.teil{background:color-mix(in srgb,#f08a00 28%,var(--surf));border-color:#f08a00}
+#qstat small{display:block;font-weight:400;color:var(--mute);font-size:.8rem}
+.hinweis{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:6px;background:var(--surf);font-size:.92rem}
+.hinweis.err{border-left-color:#b3261e}
+.hinweis span{flex:1;min-width:180px}
+#kzgruende .btn[aria-pressed="true"]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:.85rem;color:var(--mute);margin:0 0 10px}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;border:1px solid var(--line)}
 
@@ -180,6 +188,8 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   <button role="tab" id="t2" aria-selected="false">Steuerkarten</button>
 </nav>
 <main>
+  <div class="hinweis" id="neuver" hidden><span>Eine neue Version von SV-ReportQR ist da.</span><button class="btn" id="neuverok">Jetzt aktualisieren</button></div>
+  <div class="hinweis err" id="sperr" hidden><span>Speichern nicht möglich: Der Speicher des Browsers ist voll oder gesperrt. Änderungen am Status gehen beim Schließen der App verloren. Bitte abgeschlossene Projekte über „Abschließen“ löschen.</span></div>
   <section id="v1">
     <div class="bar">
       <select id="proj" aria-label="Projekt wählen" hidden></select>
@@ -209,7 +219,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
     <div class="cards" id="cards"></div>
   </section>
 </main>
-<footer>© 2026 Alexandre Bhar · Alle Rechte vorbehalten</footer>
+<footer>SV-ReportQR <span id="ver2"></span> · © 2026 Alexandre Bhar · Alle Rechte vorbehalten</footer>
 
 <!-- Vollbildansicht eines QR-Codes -->
 <div id="qrov" role="dialog" aria-modal="true" aria-label="QR-Code">
@@ -245,6 +255,9 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   </div>
   <div class="feld"><input id="frei" placeholder="Eigene Angabe, z. B. Whg. 5 Müller"><button class="btn" id="raumok">Raumkarte zeigen</button></div>
   <h3>Kein Zutritt</h3>
+  <p class="sub" style="margin:0 0 6px">Grund antippen (optional). Er steht später in der Aufnahmetabelle und im Gutachten.</p>
+  <div class="chips" id="kzgruende"></div>
+  <div class="feld"><input id="kzgrund" placeholder="Anderer Grund (optional)"></div>
   <div class="feld"><input id="kzwhg" placeholder="Wohnung (optional), z. B. 2. OG links"><button class="btn warn" id="kzok">Kein Zutritt zeigen</button></div>
   <div class="row" style="margin-top:14px"><button class="btn alt" id="mehrclose">Schließen</button></div>
 </dialog>
@@ -287,10 +300,11 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.5.1";
+const VERSION = "1.6.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
-const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>"
+const KEINZUTRITT = "CMD:KEINZUTRITT";       // Kein Zutritt, optional ":<Wohnung>;<Grund>" (wie KEIN_ZUTRITT_TRENNER in SV-ReportAssist)
+const GRUENDE = ["Keiner da", "Nur Mieter angetroffen", "Zutritt verweigert", "Termin wird vereinbart"];
 const CONTROL = [                            // Steuerkarten: Beschriftung, Kurzname, Code-Inhalt
   {t: "Außenaufnahmen",  k: "Außen", c: "CMD:AUSSEN"},
   {t: "Innenaufnahmen",  k: "Innen", c: "CMD:INNEN"},
@@ -305,6 +319,7 @@ const SPEICHER_ALT = "qr_rows";              // Version 1.0/1.1 (wird einmalig �
 const SPEICHER_RAEUME = "svqr_raeume";       // zuletzt verwendete eigene Raumangaben
 const SPEICHER_RAEUME_AUS = "svqr_raeume_aus"; // ausgeblendete Standardräume
 const STATUS = {"": "offen", ok: "erledigt", teil: "teilweise"};
+const STATUS_KNOPF = {"": "Als erledigt markieren", ok: "Erledigt ✓", teil: "Teilweise erledigt"};
 const STATUS_FOLGE = {"": "ok", ok: "teil", teil: ""};     // Doppeltipp: offen -> erledigt -> teilweise -> offen
 
 const $ = id => document.getElementById(id);
@@ -322,6 +337,7 @@ let sonder = null;        // aktuelle Raum- oder Kein-Zutritt-Karte {t, k, c}
 let histOffen = false;    // Vollbild hat einen Verlaufseintrag (für Android-Zurück)
 let tabHist = false;      // Reiter "Steuerkarten" hat einen Verlaufseintrag
 let letzterTipp = 0;      // für die Erkennung des Doppeltipps
+let wachsperre = null;    // hält den Bildschirm an, solange ein QR-Code im Vollbild steht
 
 // QR-Texte mit Umlauten als UTF-8 kodieren (Standard der Bibliothek wäre Latin-1)
 qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(s));
@@ -356,7 +372,31 @@ function qrSvg(text){
 }
 
 // ---------- Speicher (alle Projekte) ----------
-function speichern(){ try { localStorage.setItem(SPEICHER, JSON.stringify(daten)); } catch (e) {} }
+/** Speichert alle Projekte. Klappt das nicht (Speicher voll, privater Modus), erscheint ein Hinweis. */
+function speichern(){
+  let ok = true;
+  try { localStorage.setItem(SPEICHER, JSON.stringify(daten)); } catch (e) { ok = false; }
+  $("sperr").hidden = ok;
+  return ok;
+}
+
+// ---------- Bildschirm anlassen ----------
+/** Solange ein QR-Code im Vollbild steht, soll das Handy nicht abdunkeln oder sperren (Screen Wake Lock). */
+async function wachHalten(an){
+  try {
+    if (an && !wachsperre && "wakeLock" in navigator){
+      wachsperre = await navigator.wakeLock.request("screen");
+      wachsperre.addEventListener("release", () => { wachsperre = null; });
+    } else if (!an && wachsperre){
+      const w = wachsperre; wachsperre = null;
+      await w.release();
+    }
+  } catch (e) { wachsperre = null; }             // nicht unterstützt oder Akku-Sparmodus: dann eben ohne
+}
+// Das System gibt die Sperre frei, wenn die App in den Hintergrund geht: beim Zurückkommen neu anfordern
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && $("qrov").classList.contains("on")) wachHalten(true);
+});
 
 function laden(){
   try {
@@ -475,7 +515,13 @@ async function importFile(file){
 
   // Projekt anlegen oder aktualisieren (gleicher Dateiname = gleiches Projekt, Status bleibt erhalten)
   const vorhanden = daten.projekte[file.name];
-  if (vorhanden) msgs.push("Projekt „" + file.name + "“ aktualisiert, der Status der Gebäude bleibt erhalten.");
+  if (vorhanden){
+    msgs.push("Projekt „" + file.name + "“ aktualisiert, der Status der Gebäude bleibt erhalten.");
+    const geaendert = nummernGeaendert(vorhanden, keep);
+    if (geaendert.length) msgs.push("Achtung, " + geaendert.length + " Gebäude haben jetzt eine andere Nummer als beim letzten Laden: " +
+      geaendert.slice(0, 6).join(", ") + (geaendert.length > 6 ? " …" : "") + ". Schon fotografierte QR-Codes tragen noch die alte " +
+      "Nummer; deren Fotoordner heißen dann anders als in der Tabelle. Der Status wurde auf die neuen Nummern übertragen.");
+  }
   daten.projekte[file.name] = {
     datei: file.name,
     // in der App hinzugefügte Gebäude (neu: true) bleiben beim erneuten Laden der Tabelle erhalten
@@ -488,6 +534,31 @@ async function importFile(file){
   // Protokoll einklappbar, damit man nicht weit scrollen muss
   $("msg").innerHTML = msgs.length ? '<details class="log" open><summary>Protokoll (' + msgs.length + ')</summary><div class="logbody">' +
     msgs.map(m => '<p class="note' + (/Achtung/.test(m) ? " err" : "") + '">' + esc(m) + "</p>").join("") + "</div></details>" : "";
+}
+
+/**
+ * Tabelle erneut geladen: Gebäude mit gleicher Adresse, aber anderer Nummer (Zeile eingefügt oder gelöscht).
+ * Überträgt deren Status auf den neuen Namen und liefert Texte wie "Bachstr. 55 (11 → 10)".
+ */
+function nummernGeaendert(alt, neu){
+  const adresse = r => (r.street + "|" + r.nr).toLowerCase();
+  const einmalig = liste => {
+    const n = {};
+    liste.forEach(r => { const a = adresse(r); n[a] = n[a] === undefined ? r : null; });
+    return n;
+  };
+  const vorher = einmalig(alt.rows.filter(r => !r.neu)), jetzt = einmalig(neu);
+  const aus = [];
+  alt.zeit = alt.zeit || {};
+  for (const a in jetzt){
+    const n = jetzt[a], v = vorher[a];
+    const zahl = pos => String(pos).replace(/^0+(?=\d)/, "");          // "09" und "9" sind dieselbe Nummer
+    if (!n || !v || zahl(v.pos) === zahl(n.pos)) continue;
+    aus.push([n.street, n.nr].filter(Boolean).join(" ") + " (" + zahl(v.pos) + " → " + zahl(n.pos) + ")");
+    if (alt.status[v.name] && !alt.status[n.name]){ alt.status[n.name] = alt.status[v.name]; alt.zeit[n.name] = alt.zeit[v.name] || Date.now(); }
+    delete alt.status[v.name]; delete alt.zeit[v.name];
+  }
+  return aus;
 }
 
 // ---------- Gebäudeliste ----------
@@ -544,16 +615,26 @@ function openQr(i){
   $("qstat").hidden = !zeigeStatus;
   if (zeigeStatus){
     const st = statusVon(r.name);
-    $("qstat").innerHTML = 'Status: <b class="' + st + '">' + STATUS[st] + "</b> · Doppeltipp auf den Code ändert";
+    $("qstat").innerHTML = '<button class="btn alt ' + st + '" id="stbtn">' + STATUS_KNOPF[st] +
+      "<small>Antippen ändert: offen → erledigt → teilweise (oder Doppeltipp auf den Code)</small></button>";
   }
   const warOffen = $("qrov").classList.contains("on");
   $("qrov").classList.add("on");
   if (!warOffen){            // Verlaufseintrag: Android-Zurück schließt das Vollbild
     try { history.pushState({qr: 1}, ""); histOffen = true; } catch (e) {}
   }
+  wachHalten(true);
 }
 
-function closeQr(){ $("qrov").classList.remove("on"); histOffen = false; render(); }
+function closeQr(){ $("qrov").classList.remove("on"); histOffen = false; wachHalten(false); render(); }
+
+/** Status des angezeigten Gebäudes weiterschalten (Knopf oder Doppeltipp). */
+function statusWeiter(){
+  const name = ov[cur] && ov[cur].name;
+  if (!name) return;
+  setzeStatus(name, STATUS_FOLGE[statusVon(name)]);
+  openQr(cur);
+}
 
 function tab(n){
   $("v1").hidden = n !== 1; $("v2").hidden = n !== 2;
@@ -615,7 +696,8 @@ function raumEntfernen(r){
 function oeffneMehr(){
   raumBearbeiten(false);
   zeigeRaeume();
-  $("gesch").value = ""; $("lage").value = ""; $("frei").value = ""; $("kzwhg").value = "";
+  $("gesch").value = ""; $("lage").value = ""; $("frei").value = ""; $("kzwhg").value = ""; $("kzgrund").value = "";
+  Array.from($("kzgruende").children).forEach(b => b.setAttribute("aria-pressed", "false"));
   $("mehr").showModal();
 }
 
@@ -677,13 +759,10 @@ $("qrbox").onclick = () => {
   if (haus && karten){ kc = (kc + 1) % CONTROL.length; openQr(cur); return; }
   if (!haus){ if (ov.length > 1) openQr(cur + 1); return; }
   const jetzt = Date.now();
-  if (jetzt - letzterTipp < 400){
-    const name = ov[cur].name;
-    setzeStatus(name, STATUS_FOLGE[statusVon(name)]);
-    letzterTipp = 0;
-    openQr(cur);
-  } else letzterTipp = jetzt;
+  if (jetzt - letzterTipp < 400){ letzterTipp = 0; statusWeiter(); }
+  else letzterTipp = jetzt;
 };
+$("qstat").onclick = e => { if (e.target.closest("#stbtn")) statusWeiter(); };
 // Weiter/Zurück wechseln das Gebäude und zeigen immer zuerst den Haus-QR
 $("prev").onclick = () => { karten = false; openQr(cur - 1); };
 $("next").onclick = () => { karten = false; openQr(cur + 1); };
@@ -763,9 +842,21 @@ $("raumok").onclick = () => {
   if (!text){ $("frei").focus(); return; }
   raumKarte(text);
 };
+// Grund: ein Knopf wählbar (nochmal antippen = abwählen); ein eigener Text im Feld hat Vorrang
+$("kzgruende").innerHTML = GRUENDE.map(g => '<button class="btn alt" aria-pressed="false">' + esc(g) + "</button>").join("");
+$("kzgruende").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const an = b.getAttribute("aria-pressed") !== "true";
+  Array.from($("kzgruende").children).forEach(x => x.setAttribute("aria-pressed", x === b && an ? "true" : "false"));
+};
 $("kzok").onclick = () => {
-  const whg = clean($("kzwhg").value || [$("gesch").value, $("lage").value].filter(Boolean).join(" "));
-  zeigeSonder({t: "Kein Zutritt" + (whg ? ": " + whg : ""), k: "Kein Zutritt", c: KEINZUTRITT + (whg ? ":" + whg : "")});
+  const ohneTrenner = t => clean(t).replace(/;/g, ",");       // ";" trennt im Code Wohnung und Grund
+  const whg = ohneTrenner($("kzwhg").value || [$("gesch").value, $("lage").value].filter(Boolean).join(" "));
+  const gewaehlt = $("kzgruende").querySelector('[aria-pressed="true"]');
+  const grund = ohneTrenner($("kzgrund").value) || (gewaehlt ? gewaehlt.textContent : "");
+  zeigeSonder({t: "Kein Zutritt" + (whg ? ": " + whg : "") + (grund ? " (" + grund + ")" : ""), k: "Kein Zutritt",
+    c: KEINZUTRITT + (whg || grund ? ":" + whg + (grund ? ";" + grund : "") : "")});
 };
 $("mehrclose").onclick = () => $("mehr").close();
 $("mehr2").onclick = oeffneMehr;
@@ -798,7 +889,7 @@ $("print").onclick = () => {
   window.print();
 };
 
-$("ver").textContent = VERSION;
+$("ver").textContent = $("ver2").textContent = VERSION;
 $("about").onclick = () => $("aboutdlg").showModal();
 $("aboutclose").onclick = () => $("aboutdlg").close();
 
@@ -891,8 +982,22 @@ laden();
 aktiviere(daten.aktiv);
 
 // Offline-Betrieb: Service Worker speichert App und Bibliotheken (nur über https, z. B. GitHub Pages)
+// Neue Version: Der neue Service Worker ist installiert, die Seite zeigt aber noch die alte App.
+// Dann erscheint oben der Hinweis mit „Jetzt aktualisieren“ (lädt die Seite neu).
+$("neuverok").onclick = () => location.reload();
 if ("serviceWorker" in navigator && location.protocol === "https:"){
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    reg.addEventListener("updatefound", () => {
+      const neu = reg.installing;
+      if (neu) neu.addEventListener("statechange", () => {
+        if (neu.state === "installed" && navigator.serviceWorker.controller) $("neuver").hidden = false;
+      });
+    });
+    // beim Zurückkommen in die App nach einer neuen Version sehen (die App bleibt oft tagelang offen)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") reg.update().catch(() => {});
+    });
+  }).catch(() => {});
 }
 </script>
 </body>
