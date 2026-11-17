@@ -70,6 +70,23 @@ footer{color:var(--mute);font-size:.8rem;text-align:center;padding:0 16px 24px}
 .btn.alt{background:var(--surf);color:var(--ink);border:1px solid var(--line)}
 input[type=search]{flex:1;min-width:140px;min-height:48px;border:1px solid var(--line);border-radius:6px;background:var(--surf);color:var(--ink);padding:0 12px;font:inherit}
 
+/* ---------- Blatt „Projekt und Werkzeuge“ (fährt von unten hoch) ---------- */
+body{padding-bottom:72px}                       /* Platz für den Griff unten */
+.strich{display:block;width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 6px;border:0;padding:0}
+#griff{position:fixed;left:0;right:0;bottom:0;z-index:3;width:100%;max-width:900px;margin:0 auto;background:var(--surf);color:var(--ink);
+  border:1px solid var(--line);border-bottom:0;border-radius:14px 14px 0 0;font:inherit;font-weight:600;
+  padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px));min-height:56px}
+#blattbg{position:fixed;inset:0;z-index:3;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s}
+#blatt{position:fixed;left:0;right:0;bottom:0;z-index:4;max-width:900px;margin:0 auto;max-height:85vh;overflow:auto;
+  background:var(--surf);border-radius:16px 16px 0 0;padding:6px 16px calc(8px + env(safe-area-inset-bottom,0px));
+  transform:translateY(105%);visibility:hidden;transition:transform .25s,visibility 0s .25s}
+#blatt .strich{width:64px;height:24px;background:none;position:relative;cursor:pointer;margin-bottom:4px}
+#blatt .strich::after{content:"";position:absolute;left:10px;right:10px;top:9px;height:5px;border-radius:3px;background:var(--line)}
+#blatt .btn.alt,#blatt select{background:var(--bg)}
+body.blatt #blattbg{opacity:1;pointer-events:auto}
+body.blatt #blatt{transform:none;visibility:visible;transition:transform .25s}
+.empty .bar{justify-content:center;margin:12px 0 0}
+
 /* ---------- Gebäude-Buttons, Hinweise, Protokoll ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .house{background:var(--surf);color:var(--ink);border:1px solid var(--line);border-left:6px solid var(--acc);border-radius:6px;text-align:left;padding:10px;font:inherit;min-height:64px}
@@ -103,8 +120,9 @@ input[type=search]{flex:1;min-width:140px;min-height:48px;border:1px solid var(-
 #qrbox svg{width:100%;height:auto;display:block}
 #qrname{font-size:1.3rem;font-weight:700;text-align:center;margin:14px 8px 4px;overflow-wrap:anywhere}
 .bottom{margin-top:auto}
-#ktabs{display:flex;gap:6px;margin:0 0 10px}
-#ktabs .btn{flex:1;padding:10px 4px}
+/* Steuerkarten-Knöpfe: 2 breit × 3 hoch in der linken Hälfte (Einhandbedienung), Start/Stop unten */
+#ktabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:min(50%,320px);margin:0 0 10px}
+#ktabs .btn{padding:8px 4px;font-size:.92rem;line-height:1.15}
 #ktabs .btn[aria-pressed="true"]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
 #qrov .top{display:flex;align-items:center;padding:10px 0;gap:8px}
 #qrov .top .btn{padding:12px}
@@ -154,6 +172,10 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 .kopf{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px}
 .kopf h3{margin:0!important}
 .kopf .btn{min-height:36px;padding:4px 12px;font-size:.9rem}
+/* Abschnitte „Raum“ und „Kein Zutritt“ klar trennen: farbige Linie unter der Überschrift, Abstand davor */
+#mehr .abschnitt{border-bottom:2px solid var(--acc);padding-bottom:6px;margin-bottom:10px}
+#mehr h3.abschnitt.rot{border-bottom-color:#b3261e;color:var(--err);margin-top:28px}
+#mehr h3.unter{font-size:.9rem;color:var(--mute);margin:12px 0 4px}
 #raeume.bearb .btn{border-style:dashed}
 #raeume.bearb .btn::before{content:"✕ ";color:#b3261e}
 #raumopt{margin-top:8px}
@@ -193,28 +215,28 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   <div class="hinweis" id="neuver" hidden><span>Eine neue Version von SV-ReportQR ist da.</span><button class="btn" id="neuverok">Jetzt aktualisieren</button></div>
   <div class="hinweis err" id="sperr" hidden><span>Speichern nicht möglich: Der Speicher des Browsers ist voll oder gesperrt. Änderungen am Status gehen beim Schließen der App verloren. Bitte abgeschlossene Projekte über „Abschließen“ löschen.</span></div>
   <section id="v1">
-    <!-- Projekt und Werkzeuge: einklappbar, damit bei der Arbeit mehr Platz für die Kacheln bleibt.
-         Ohne gewähltes Projekt immer offen; sonst gilt der zuletzt gewählte Zustand (SPEICHER_WERKZEUGE). -->
-    <details class="log" id="werkzeuge" open>
-      <summary id="werkzeugekopf">Projekt und Werkzeuge</summary>
-      <div class="logbody">
-        <div class="bar">
-          <select id="proj" aria-label="Projekt wählen" hidden></select>
-          <button class="btn alt" id="done" hidden>Abschließen</button>
-        </div>
-        <div class="bar">
-          <button class="btn alt" id="share" hidden>Status teilen</button>
-          <button class="btn alt" id="import">Status übernehmen</button>
-          <input type="file" id="importfile" accept=".json,application/json" hidden>
-        </div>
-        <div class="bar">
-          <button class="btn" id="load">Excel-Tabelle laden</button>
-          <button class="btn alt" id="neuproj">Neues Projekt ohne Tabelle</button>
-          <button class="btn alt" id="projkarte" hidden>Projektkarte</button>
-          <input type="file" id="file" accept=".xlsx,.xls" hidden>
-        </div>
+    <!-- Projekt und Werkzeuge: Blatt, das von unten hochfährt (Griff unten am Bildschirm).
+         So bleibt oben der ganze Platz für Suche und Gebäude, die Knöpfe liegen beim Daumen. -->
+    <button id="griff" type="button" aria-haspopup="dialog" aria-controls="blatt"><span class="strich"></span>Projekt und Werkzeuge</button>
+    <div id="blattbg"></div>
+    <div id="blatt" role="dialog" aria-modal="true" aria-label="Projekt und Werkzeuge">
+      <button class="strich" id="blattzu" type="button" aria-label="Schließen"></button>
+      <div class="bar">
+        <select id="proj" aria-label="Projekt wählen" hidden></select>
+        <button class="btn alt" id="done" hidden>Abschließen</button>
       </div>
-    </details>
+      <div class="bar">
+        <button class="btn alt" id="share" hidden>Status teilen</button>
+        <button class="btn alt" id="import">Status übernehmen</button>
+        <input type="file" id="importfile" accept=".json,application/json" hidden>
+      </div>
+      <div class="bar">
+        <button class="btn" id="load">Excel-Tabelle laden</button>
+        <button class="btn alt" id="neuproj">Neues Projekt ohne Tabelle</button>
+        <button class="btn alt" id="projkarte" hidden>Projektkarte</button>
+        <input type="file" id="file" accept=".xlsx,.xls" hidden>
+      </div>
+    </div>
     <div class="bar">
       <input type="search" id="q" placeholder="Suchen, z. B. 340a">
       <select id="filter" aria-label="Filter" hidden>
@@ -255,19 +277,19 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 
 <!-- Erweitert: Raumkarten und Kein Zutritt -->
 <dialog id="mehr">
-  <div class="kopf"><h3>Raum</h3><button class="btn alt" id="raumbearb" aria-pressed="false">Bearbeiten</button></div>
+  <div class="kopf abschnitt"><h3>Raum</h3><button class="btn alt" id="raumbearb" aria-pressed="false">Bearbeiten</button></div>
   <div class="chips" id="raeume"></div>
   <div class="bar" id="raumopt" hidden>
     <span class="sub">Antippen entfernt den Raum aus der Liste.</span>
     <button class="btn alt" id="raumstd">Standardliste wiederherstellen</button>
   </div>
-  <h3>Wohnung / Geschoss</h3>
+  <h3 class="unter">Wohnung / Geschoss</h3>
   <div class="feld">
     <select id="gesch"><option value="">Geschoss</option></select>
     <select id="lage"><option value="">Lage</option><option>links</option><option>mitte</option><option>rechts</option><option>vorne</option><option>hinten</option></select>
   </div>
   <div class="feld"><input id="frei" placeholder="Eigene Angabe, z. B. Whg. 5 Müller"><button class="btn" id="raumok">Raumkarte zeigen</button></div>
-  <h3>Kein Zutritt</h3>
+  <h3 class="abschnitt rot">Kein Zutritt</h3>
   <p class="sub" style="margin:0 0 6px">Grund antippen (optional). Er steht später in der Aufnahmetabelle und im Gutachten.</p>
   <div class="chips" id="kzgruende"></div>
   <div class="feld"><input id="kzgrund" placeholder="Anderer Grund (optional)"></div>
@@ -323,7 +345,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.8.0";
+const VERSION = "1.9.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const PROJEKT = "CMD:PROJEKT:";              // Projektkarte, gleich wie PROJEKT_PREFIX in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
@@ -342,7 +364,6 @@ const SPEICHER = "svqr_daten";               // alle Projekte
 const SPEICHER_ALT = "qr_rows";              // Version 1.0/1.1 (wird einmalig übernommen)
 const SPEICHER_RAEUME = "svqr_raeume";       // zuletzt verwendete eigene Raumangaben
 const SPEICHER_RAEUME_AUS = "svqr_raeume_aus"; // ausgeblendete Standardräume
-const SPEICHER_WERKZEUGE = "svqr_werkzeuge";   // Bereich „Projekt und Werkzeuge“: "zu" = eingeklappt
 const STATUS = {"": "offen", ok: "erledigt", teil: "teilweise"};
 const STATUS_KNOPF = {"": "Als erledigt markieren", ok: "Erledigt ✓", teil: "Teilweise erledigt"};
 const STATUS_FOLGE = {"": "ok", ok: "teil", teil: ""};     // Doppeltipp: offen -> erledigt -> teilweise -> offen
@@ -363,7 +384,9 @@ let histOffen = false;    // Vollbild hat einen Verlaufseintrag (für Android-Zu
 let tabHist = false;      // Reiter "Steuerkarten" hat einen Verlaufseintrag
 let letzterTipp = 0;      // für die Erkennung des Doppeltipps
 let wachsperre = null;    // hält den Bildschirm an, solange ein QR-Code im Vollbild steht
-let werkzeugeFuer;        // Projekt, für das der Bereich „Projekt und Werkzeuge“ zuletzt gesetzt wurde
+let blattHist = false;    // Blatt „Projekt und Werkzeuge“ hat einen Verlaufseintrag
+let blattZurueck = false; // Blatt wurde per Knopf geschlossen, das zugehörige popstate steht noch aus
+let nachBlatt = null;     // Aktion, die nach dem Schließen des Blatts laufen soll
 
 // QR-Texte mit Umlauten als UTF-8 kodieren (Standard der Bibliothek wäre Latin-1)
 qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(s));
@@ -587,22 +610,48 @@ function nummernGeaendert(alt, neu){
   return aus;
 }
 
-// ---------- Bereich „Projekt und Werkzeuge“ ----------
-/** Ohne Projekt immer offen (sonst findet man „Excel-Tabelle laden“ nicht). Beim Wechsel zu einem
- *  Projekt gilt der zuletzt gewählte Zustand; danach bleibt er, wie der Nutzer ihn hinterlässt. */
-function werkzeugeSetzen(p){
-  const id = p ? daten.aktiv : null;
-  if (id === werkzeugeFuer) return;
-  werkzeugeFuer = id;
-  let zu = false;
-  if (p) { try { zu = localStorage.getItem(SPEICHER_WERKZEUGE) === "zu"; } catch (e) {} }
-  $("werkzeuge").open = !zu;
+// ---------- Blatt „Projekt und Werkzeuge“ (fährt von unten hoch) ----------
+// Öffnen legt einen Verlaufseintrag an, damit Android-Zurück das Blatt schließt statt die App.
+// Schließen über einen Knopf geht im Verlauf zurück; was danach kommt (z. B. Projektkarte im Vollbild,
+// das selbst einen Eintrag anlegt), läuft erst, wenn dieser Schritt erledigt ist (nachBlatt).
+function blattOffen(){ return document.body.classList.contains("blatt"); }
+function blattAuf(){
+  if (blattOffen()) return;
+  document.body.classList.add("blatt");
+  try { history.pushState({blatt: 1}, ""); blattHist = true; } catch (e) {}
+  $("blattzu").focus();
 }
-// Antippen der Kopfzeile: neuen Zustand merken (der Klick kommt vor dem Umschalten)
-$("werkzeugekopf").addEventListener("click", () => {
-  const zu = $("werkzeuge").open;
-  try { localStorage.setItem(SPEICHER_WERKZEUGE, zu ? "zu" : "auf"); } catch (e) {}
-});
+function blattZu(danach){
+  if (!blattOffen()){ if (danach) danach(); return; }
+  document.body.classList.remove("blatt");
+  $("blatt").style.transform = "";
+  if (blattHist){
+    blattHist = false; blattZurueck = true; nachBlatt = danach || null;
+    history.back();
+    setTimeout(() => { if (blattZurueck){ blattZurueck = false; blattWeiter(); } }, 400);  // falls kein popstate kommt
+  } else if (danach) danach();
+}
+function blattWeiter(){ const f = nachBlatt; nachBlatt = null; if (f) f(); }
+$("griff").onclick = blattAuf;
+$("blattbg").onclick = () => blattZu();
+$("blattzu").onclick = () => blattZu();
+document.addEventListener("keydown", e => { if (e.key === "Escape" && blattOffen()) blattZu(); });
+// Nach unten wischen schließt das Blatt (nur wenn es ganz oben steht, sonst scrollt es)
+(function(){
+  let y0 = null, dy = 0;
+  const b = $("blatt");
+  b.addEventListener("touchstart", e => { y0 = b.scrollTop > 0 ? null : e.touches[0].clientY; dy = 0; }, {passive: true});
+  b.addEventListener("touchmove", e => {
+    if (y0 === null) return;
+    dy = Math.max(0, e.touches[0].clientY - y0);
+    b.style.transition = "none"; b.style.transform = "translateY(" + dy + "px)";
+  }, {passive: true});
+  b.addEventListener("touchend", () => {
+    if (y0 === null) return;
+    b.style.transition = ""; y0 = null;
+    if (dy > 70) blattZu(); else b.style.transform = "";
+  });
+})();
 
 // ---------- Gebäudeliste ----------
 function render(){
@@ -614,7 +663,6 @@ function render(){
   $("share").hidden = $("filter").hidden = $("legend").hidden = !rows.length;
   $("done").hidden = !p;
   $("projkarte").hidden = !p;
-  werkzeugeSetzen(p);
 
   if (!rows.length && p && p.ohneTabelle){
     $("status").textContent = p.datei + " · noch keine Gebäude";
@@ -624,7 +672,12 @@ function render(){
   }
   if (!rows.length){
     $("status").textContent = ids.length ? "Kein Projekt gewählt." : "Noch kein Projekt geladen.";
-    $("grid").innerHTML = '<div class="empty" style="grid-column:1/-1">Excel-Tabelle laden, um die Gebäude-Buttons zu erzeugen.</div>';
+    // Ohne Projekt die wichtigsten Knöpfe direkt hier zeigen (sonst müsste man das Blatt erst finden)
+    $("grid").innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+      (ids.length ? "Projekt wählen oder neu anlegen." : "Excel-Tabelle laden, um die Gebäude-Buttons zu erzeugen.") +
+      '<div class="bar">' + (ids.length ? '<button class="btn alt" data-akt="blatt">Projekt wählen</button>' : "") +
+      '<button class="btn" data-akt="load">Excel-Tabelle laden</button>' +
+      '<button class="btn alt" data-akt="neuproj">Neues Projekt ohne Tabelle</button></div></div>';
     return;
   }
   const n = {ok: 0, teil: 0};
@@ -661,7 +714,8 @@ function openQr(i){
   $("kbtn").hidden = !haus;
   $("entf").hidden = !(haus && !k && r.neu);          // nur in der App hinzugefügte Gebäude
   $("kbtn").textContent = k ? "Haus-QR" : "Steuerkarten";
-  Array.from($("ktabs").children).forEach((b, j) => b.setAttribute("aria-pressed", j === kc || (kc < 0 && j === CONTROL.length)));
+  Array.from($("ktabs").children).forEach(b => b.setAttribute("aria-pressed",
+    b.dataset.k === String(kc) || (kc < 0 && b.dataset.k === "mehr")));
   $("cnt").textContent = (cur + 1) + " von " + ov.length;
   const zeigeStatus = haus && !k;
   $("qstat").hidden = !zeigeStatus;
@@ -761,12 +815,15 @@ function raumKarte(text){
 }
 
 // ---------- Ereignisse ----------
-$("load").onclick = () => $("file").click();
+// Knöpfe im Blatt schließen es danach. Dateiauswahl und Teilen müssen direkt im Tipp starten
+// (sonst blockt der Browser sie), deshalb zuerst die Aktion, dann blattZu().
+$("load").onclick = () => { $("file").click(); blattZu(); };
 
 // Neues Projekt ohne Aufnahmetabelle (spontaner Termin)
 $("neuproj").onclick = () => {
   $("neuprojname").value = ""; $("neuprojfehler").hidden = true;
   $("neuprojdlg").showModal(); $("neuprojname").focus();
+  blattZu();
 };
 $("neuprojab").onclick = () => $("neuprojdlg").close();
 function neuProjektAnlegen(){
@@ -790,21 +847,23 @@ $("projkarte").onclick = () => {
   const p = projekt();
   if (!p) return;
   const a = aktenname(p);
-  zeigeSonder({t: "Projekt: " + a, k: "Projekt", c: PROJEKT + a});
+  // erst nach dem Schließen des Blatts: das Vollbild legt selbst einen Verlaufseintrag an
+  blattZu(() => zeigeSonder({t: "Projekt: " + a, k: "Projekt", c: PROJEKT + a}));
 };
 $("file").onchange = e => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ""; };
 $("q").oninput = render;
 $("filter").onchange = render;
-$("proj").onchange = e => aktiviere(e.target.value);
+$("proj").onchange = e => { aktiviere(e.target.value); if (projekt()) blattZu(); };
 
-// Projekt abschließen: gibt den Speicher frei, andere Projekte bleiben erhalten
-$("share").onclick = statusTeilen;
-$("import").onclick = () => $("importfile").click();
+$("share").onclick = () => { statusTeilen(); blattZu(); };
+$("import").onclick = () => { $("importfile").click(); blattZu(); };
 $("importfile").onchange = e => { if (e.target.files[0]) statusUebernehmen(e.target.files[0]); e.target.value = ""; };
 
+// Projekt abschließen: gibt den Speicher frei, andere Projekte bleiben erhalten
 $("done").onclick = async () => {
   const p = projekt();
   if (!p) return;
+  blattZu();
   const ok = await ask("Projekt „" + p.datei + "“ abschließen? Tabelle und Status der " + p.rows.length +
     " Gebäude werden von diesem Gerät gelöscht.", "Projekt abschließen", "Abbrechen");
   if (!ok) return;
@@ -815,6 +874,11 @@ $("done").onclick = async () => {
 
 $("grid").onclick = e => {
   if (e.target.closest("#addb")){ neuOeffnen(); return; }
+  const akt = e.target.closest("[data-akt]");       // Knöpfe der leeren Liste (ohne Projekt)
+  if (akt){
+    if (akt.dataset.akt === "blatt") blattAuf(); else $(akt.dataset.akt).click();
+    return;
+  }
   const b = e.target.closest(".house");
   if (!b) return;
   haus = true; karten = false; kc = 0;
@@ -827,8 +891,10 @@ $("close").onclick = () => {
   else closeQr();
 };
 
-// Android-Zurück (Taste oder Wischgeste): erst Vollbild schließen, dann Reiter "Steuerkarten" -> "Gebäude"
+// Android-Zurück (Taste oder Wischgeste): erst Blatt bzw. Vollbild schließen, dann Reiter "Steuerkarten" -> "Gebäude"
 window.addEventListener("popstate", () => {
+  if (blattZurueck){ blattZurueck = false; blattWeiter(); return; }   // Blatt per Knopf geschlossen
+  if (blattOffen()){ blattHist = false; blattZu(); return; }
   if ($("mehr").open){ $("mehr").close(); }
   if ($("qrov").classList.contains("on")){ closeQr(); return; }
   if (!$("v2").hidden){ tabHist = false; tab(1); }
@@ -908,8 +974,11 @@ $("entf").onclick = async () => {
 };
 
 $("kbtn").onclick = () => { karten = !karten; if (kc < 0 && !sonder) kc = 0; openQr(cur); };
-$("ktabs").innerHTML = CONTROL.map((c, j) => '<button class="btn alt" data-k="' + j + '">' + c.k + "</button>").join("") +
-  '<button class="btn alt" data-k="mehr">Mehr …</button>';
+// Reihenfolge im Raster (Indizes in CONTROL): oben Keine Schäden | Mehr, Mitte Außen | Innen, unten Start | Stop
+const KTABS_ORDNUNG = [2, "mehr", 0, 1, 3, 4];
+$("ktabs").innerHTML = KTABS_ORDNUNG.map(k => k === "mehr"
+  ? '<button class="btn alt" data-k="mehr">Mehr …</button>'
+  : '<button class="btn alt" data-k="' + k + '">' + CONTROL[k].k + "</button>").join("");
 $("ktabs").onclick = e => {
   const b = e.target.closest("button");
   if (!b) return;
