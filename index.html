@@ -193,25 +193,34 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
   <div class="hinweis" id="neuver" hidden><span>Eine neue Version von SV-ReportQR ist da.</span><button class="btn" id="neuverok">Jetzt aktualisieren</button></div>
   <div class="hinweis err" id="sperr" hidden><span>Speichern nicht möglich: Der Speicher des Browsers ist voll oder gesperrt. Änderungen am Status gehen beim Schließen der App verloren. Bitte abgeschlossene Projekte über „Abschließen“ löschen.</span></div>
   <section id="v1">
+    <!-- Projekt und Werkzeuge: einklappbar, damit bei der Arbeit mehr Platz für die Kacheln bleibt.
+         Ohne gewähltes Projekt immer offen; sonst gilt der zuletzt gewählte Zustand (SPEICHER_WERKZEUGE). -->
+    <details class="log" id="werkzeuge" open>
+      <summary id="werkzeugekopf">Projekt und Werkzeuge</summary>
+      <div class="logbody">
+        <div class="bar">
+          <select id="proj" aria-label="Projekt wählen" hidden></select>
+          <button class="btn alt" id="done" hidden>Abschließen</button>
+        </div>
+        <div class="bar">
+          <button class="btn alt" id="share" hidden>Status teilen</button>
+          <button class="btn alt" id="import">Status übernehmen</button>
+          <input type="file" id="importfile" accept=".json,application/json" hidden>
+        </div>
+        <div class="bar">
+          <button class="btn" id="load">Excel-Tabelle laden</button>
+          <button class="btn alt" id="neuproj">Neues Projekt ohne Tabelle</button>
+          <button class="btn alt" id="projkarte" hidden>Projektkarte</button>
+          <input type="file" id="file" accept=".xlsx,.xls" hidden>
+        </div>
+      </div>
+    </details>
     <div class="bar">
-      <select id="proj" aria-label="Projekt wählen" hidden></select>
-      <button class="btn alt" id="done" hidden>Abschließen</button>
-    </div>
-    <div class="bar">
-      <button class="btn alt" id="share" hidden>Status teilen</button>
-      <button class="btn alt" id="import">Status übernehmen</button>
-      <input type="file" id="importfile" accept=".json,application/json" hidden>
-    </div>
-    <div class="bar">
-      <button class="btn" id="load">Excel-Tabelle laden</button>
-      <button class="btn alt" id="neuproj">Neues Projekt ohne Tabelle</button>
-      <button class="btn alt" id="projkarte" hidden>Projektkarte</button>
       <input type="search" id="q" placeholder="Suchen, z. B. 340a">
       <select id="filter" aria-label="Filter" hidden>
         <option value="">Alle</option><option value="offen">Offen</option>
         <option value="teil">Teilweise</option><option value="ok">Erledigt</option>
       </select>
-      <input type="file" id="file" accept=".xlsx,.xls" hidden>
     </div>
     <div class="legend" id="legend" hidden><span><i style="background:color-mix(in srgb,#2e9d4f 26%,var(--surf))"></i>erledigt</span><span><i style="background:color-mix(in srgb,#f08a00 28%,var(--surf))"></i>teilweise</span><span><i style="background:var(--surf)"></i>offen</span></div>
     <div id="msg"></div>
@@ -314,7 +323,7 @@ select{min-height:48px;border:1px solid var(--line);border-radius:6px;background
 /* ======================================================================
    SV-ReportQR · Copyright (c) 2026 Alexandre Bhar · Alle Rechte vorbehalten
    ====================================================================== */
-const VERSION = "1.7.0";
+const VERSION = "1.8.0";
 const PREFIX = "ORDNER:";                    // Gebäude-Code, gleich wie in SV-ReportAssist
 const PROJEKT = "CMD:PROJEKT:";              // Projektkarte, gleich wie PROJEKT_PREFIX in SV-ReportAssist
 const RAUM = "CMD:RAUM:";                    // Raumkarte, gleich wie RAUM_PREFIX in SV-ReportAssist
@@ -333,6 +342,7 @@ const SPEICHER = "svqr_daten";               // alle Projekte
 const SPEICHER_ALT = "qr_rows";              // Version 1.0/1.1 (wird einmalig übernommen)
 const SPEICHER_RAEUME = "svqr_raeume";       // zuletzt verwendete eigene Raumangaben
 const SPEICHER_RAEUME_AUS = "svqr_raeume_aus"; // ausgeblendete Standardräume
+const SPEICHER_WERKZEUGE = "svqr_werkzeuge";   // Bereich „Projekt und Werkzeuge“: "zu" = eingeklappt
 const STATUS = {"": "offen", ok: "erledigt", teil: "teilweise"};
 const STATUS_KNOPF = {"": "Als erledigt markieren", ok: "Erledigt ✓", teil: "Teilweise erledigt"};
 const STATUS_FOLGE = {"": "ok", ok: "teil", teil: ""};     // Doppeltipp: offen -> erledigt -> teilweise -> offen
@@ -353,6 +363,7 @@ let histOffen = false;    // Vollbild hat einen Verlaufseintrag (für Android-Zu
 let tabHist = false;      // Reiter "Steuerkarten" hat einen Verlaufseintrag
 let letzterTipp = 0;      // für die Erkennung des Doppeltipps
 let wachsperre = null;    // hält den Bildschirm an, solange ein QR-Code im Vollbild steht
+let werkzeugeFuer;        // Projekt, für das der Bereich „Projekt und Werkzeuge“ zuletzt gesetzt wurde
 
 // QR-Texte mit Umlauten als UTF-8 kodieren (Standard der Bibliothek wäre Latin-1)
 qrcode.stringToBytes = s => Array.from(new TextEncoder().encode(s));
@@ -576,6 +587,23 @@ function nummernGeaendert(alt, neu){
   return aus;
 }
 
+// ---------- Bereich „Projekt und Werkzeuge“ ----------
+/** Ohne Projekt immer offen (sonst findet man „Excel-Tabelle laden“ nicht). Beim Wechsel zu einem
+ *  Projekt gilt der zuletzt gewählte Zustand; danach bleibt er, wie der Nutzer ihn hinterlässt. */
+function werkzeugeSetzen(p){
+  const id = p ? daten.aktiv : null;
+  if (id === werkzeugeFuer) return;
+  werkzeugeFuer = id;
+  let zu = false;
+  if (p) { try { zu = localStorage.getItem(SPEICHER_WERKZEUGE) === "zu"; } catch (e) {} }
+  $("werkzeuge").open = !zu;
+}
+// Antippen der Kopfzeile: neuen Zustand merken (der Klick kommt vor dem Umschalten)
+$("werkzeugekopf").addEventListener("click", () => {
+  const zu = $("werkzeuge").open;
+  try { localStorage.setItem(SPEICHER_WERKZEUGE, zu ? "zu" : "auf"); } catch (e) {}
+});
+
 // ---------- Gebäudeliste ----------
 function render(){
   const p = projekt();
@@ -586,6 +614,7 @@ function render(){
   $("share").hidden = $("filter").hidden = $("legend").hidden = !rows.length;
   $("done").hidden = !p;
   $("projkarte").hidden = !p;
+  werkzeugeSetzen(p);
 
   if (!rows.length && p && p.ohneTabelle){
     $("status").textContent = p.datei + " · noch keine Gebäude";

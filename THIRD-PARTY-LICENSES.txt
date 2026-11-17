@@ -54,6 +54,32 @@ NumPy (nur falls bei der Erstellung vorhanden)
   Lizenz: BSD 3-Clause License
   https://numpy.org/doc/stable/license.html
 
+Ed25519-Signaturprüfung (windows/ed25519.py, nach RFC 8032, Abschnitt 6)
+  Copyright (c) 2017 IETF Trust and the persons identified as the document
+  authors (S. Josefsson, I. Liusvaara). All rights reserved.
+  Code Components unter der Simplified BSD License:
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+  (1) Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer. (2) Redistributions in
+  binary form must reproduce the above copyright notice, this list of
+  conditions and the following disclaimer in the documentation and/or other
+  materials provided with the distribution. THIS SOFTWARE IS PROVIDED BY THE
+  COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+  WARRANTIES ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+  CONTRIBUTORS BE LIABLE FOR ANY DAMAGES ARISING IN ANY WAY OUT OF THE USE OF
+  THIS SOFTWARE.
+
+ONNX Runtime (nur SV-ReportAssist, Bildvorschläge der Schlussbegehung)
+  Copyright (c) Microsoft Corporation
+  Lizenz: MIT License
+  https://github.com/microsoft/onnxruntime/blob/main/LICENSE
+
+DINOv2-small (Bilderkennungsmodell, separate Datei modelle/dinov2_small.onnx)
+  Copyright (c) Meta Platforms, Inc. and affiliates
+  Lizenz: Apache License 2.0
+  https://github.com/facebookresearch/dinov2/blob/main/LICENSE
+
 PyInstaller (Bootloader)
   Copyright (c) 2010-2026 PyInstaller Development Team
   Lizenz: GNU GPL 2.0 mit Bootloader-Ausnahme. Die Ausnahme erlaubt ausdrücklich,
